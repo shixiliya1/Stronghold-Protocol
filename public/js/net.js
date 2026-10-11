@@ -92,12 +92,48 @@ export function backoffDelay(attempt, rand = Math.random) {
   return Math.max(100, Math.round(raw + jitter));
 }
 
+/** localStorage key of the remote game server chosen with `?server=` (client package: local assets, remote /ws). */
+export const K_SERVER = 'sp.server';
+
+/**
+ * Remote game server: `?server=wss://host/ws` (or `wss://host`) picks it and remembers it in localStorage;
+ * `?server=local` forgets it (the page's own /ws again). Only ws: / wss: URLs are accepted.
+ * @param {{search?: string}} [loc]
+ * @returns {string|null}
+ */
+export function remoteServerUrl(loc = globalThis.location) {
+  let store;
+  try { store = globalThis.localStorage || null; } catch { store = null; }
+  let q;
+  try { q = loc && loc.search ? new URLSearchParams(loc.search).get('server') : null; } catch { q = null; }
+  if (q != null) {
+    const v = q.trim();
+    if (!v || v === 'local') { try { store?.removeItem(K_SERVER); } catch { /* ignore */ } return null; }
+    const url = normalizeServerUrl(v);
+    if (url) { try { store?.setItem(K_SERVER, url); } catch { /* ignore */ } return url; }
+  }
+  let saved;
+  try { saved = store?.getItem(K_SERVER) || null; } catch { saved = null; }
+  return saved ? normalizeServerUrl(saved) : null;
+}
+
+/** `wss://host[/ws]` → `wss://host/ws`; anything that is not ws:/wss: → null. */
+function normalizeServerUrl(v) {
+  let u;
+  try { u = new URL(v); } catch { return null; }
+  if (u.protocol !== 'ws:' && u.protocol !== 'wss:') return null;
+  if (u.pathname === '/' || u.pathname === '') u.pathname = '/ws';
+  return u.toString();
+}
+
 /**
  * WebSocket URL for the current page (`ws(s)://host/ws`).
  * @param {{protocol: string, host: string}} [loc]
  * @returns {string}
  */
 export function defaultWsUrl(loc = globalThis.location) {
+  const remote = remoteServerUrl(loc);
+  if (remote) return remote;
   if (!loc || !loc.host) return 'ws://localhost:3000/ws';
   return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws`;
 }
