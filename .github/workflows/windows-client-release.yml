@@ -1,0 +1,84 @@
+# Windows cloud-client package: local art/UI (node.exe + assets bundled), game sync to a remote server
+# (scripts/make-windows-bundle.mjs --cloud, public/js/net.js ?server=). Built on Linux; the bundle is Windows-only.
+name: Windows client release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to create or update
+        required: true
+        default: v0.2.4-cloud.1
+      server:
+        description: Game server WebSocket URL for 联机-云服务器.bat
+        required: true
+        default: wss://stronghold-xili.japaneast.cloudapp.azure.com/ws
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-client-release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      SERVER_URL: ${{ github.event.inputs.server || 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Download game art (~550 MB)
+        run: node tools/setup.mjs -y --no-local
+
+      - name: Build the Windows bundle
+        run: |
+          node scripts/make-windows-bundle.mjs \
+            --out "$RUNNER_TEMP/out/Stronghold-Protocol-Windows" \
+            --cloud "$SERVER_URL"
+
+      - name: Zip (UTF-8 file names)
+        id: zip
+        run: |
+          ZIP="$RUNNER_TEMP/Stronghold-Protocol-Windows-client-$TAG.zip"
+          cd "$RUNNER_TEMP/out"
+          python3 - "$ZIP" <<'PY'
+          import os, sys, zipfile
+          root = 'Stronghold-Protocol-Windows'
+          with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+              for d, _, files in os.walk(root):
+                  for f in sorted(files):
+                      p = os.path.join(d, f)
+                      z.write(p, p.replace(os.sep, '/'))
+          PY
+          sha256sum "$ZIP" | tee "$ZIP.sha256"
+          ls -l "$ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Windows client ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          body: |
+            Windows 云联机客户端（非官方同人，严禁盈利，素材版权归原权利人，见 NOTICE.md）。
+            解压后双击「联机-云服务器.bat」：素材从本机读取，对局同步连 ${{ env.SERVER_URL }}。
+            双击「启动游戏.bat」：本机开服（离线单人 / 局域网）。
+          files: |
+            ${{ steps.zip.outputs.zip }}
+            ${{ steps.zip.outputs.zip }}.sha256
+          fail_on_unmatched_files: true
