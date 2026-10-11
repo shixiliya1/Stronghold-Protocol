@@ -76,7 +76,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           body: |
             Windows 云联机客户端（非官方同人，严禁盈利，素材版权归原权利人，见 NOTICE.md）。
-            解压后双击「联机-云服务器.bat」：素材从本机读取，对局同步连 ${{ env.SERVER_URL }}。
+            解压后双击「联机-云服务器.bat」：素材从本机读取，连接云服务器进行联机。
             双击「启动游戏.bat」：本机开服（离线单人 / 局域网）。
           files: |
             ${{ steps.zip.outputs.zip }}
