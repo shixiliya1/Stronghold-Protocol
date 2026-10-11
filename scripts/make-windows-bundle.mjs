@@ -68,7 +68,7 @@ const LEGAL_FILES = ['LICENSE', 'NOTICE.md', 'THIRD-PARTY-NOTICES.md'];
 const LOCAL_ASSET_MANIFEST = path.join('data', 'local-assets.json');
 
 function parseArgs(argv) {
-  const o = { out: '', node: true, force: false, nodeSpec: '', sha256: '' };
+  const o = { out: '', node: true, force: false, nodeSpec: '', sha256: '', cloud: '' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const [k, v] = a.split('=');
@@ -78,6 +78,7 @@ function parseArgs(argv) {
     else if (k === '--sha256') o.sha256 = String(val() || '').toLowerCase();
     else if (a === '--no-node') o.node = false;
     else if (a === '--force') o.force = true;
+    else if (k === '--cloud') o.cloud = String(val() || '');
     else if (a === '-h' || a === '--help') o.help = true;
   }
   return o;
@@ -90,6 +91,7 @@ const HELP = `node scripts/make-windows-bundle.mjs — 生成 Windows 开箱即�
   --force            目录已存在时先删掉（只肯删空目录，或上一次打的便携包；其余情况拒绝）
   --node-version X   换一个 Node 版本（默认 ${NODE_PIN.version}）；换版本必须同时给 --sha256
   --sha256 <hash>    该版本 win-x64.zip 的 sha256（取自官方 SHASUMS256.txt）
+  --cloud <wss-url>  另生成 联机-云服务器.bat：素材从本机读取，只有对局同步连这个服务器（?server=，见 public/js/net.js）
 
   app\\ 里只放 git 跟踪的文件 + 生产依赖（npm ci --omit=dev）+ public/{assets,fonts,vendor}；
   因此 .env / .venv / .claude / scripts/service.env.cmd 这些本机文件不会被打进去。
@@ -450,9 +452,40 @@ ${tree}
 `;
 }
 
+/** `--cloud` 的地址：只认 ws: / wss:，没写路径时补 /ws（与 public/js/net.js normalizeServerUrl 一致）。 */
+export function cloudServerUrl(v) {
+  let u;
+  try { u = new URL(String(v || '')); } catch { return null; }
+  if (u.protocol !== 'ws:' && u.protocol !== 'wss:') return null;
+  if (u.pathname === '/' || u.pathname === '') u.pathname = '/ws';
+  return u.toString();
+}
+
+/** 联机-云服务器.bat 的内容：本机只在 127.0.0.1 上提供页面与素材，对局同步走 `url`。 */
+export function cloudBat(url) {
+  return bat(`rem Local art/UI from this PC (127.0.0.1 only); game sync via the cloud server.\r\n"%NODE%" "%HERE%app\\scripts\\launch.mjs" --no-setup --host 127.0.0.1 --server ${url} %*`);
+}
+
+/** 追加到 README-开箱即用.md 的「联机（云服务器）模式」一节。 */
+export function cloudReadme(url) {
+  return `
+
+## 联机（云服务器）模式 · 本包新增
+
+- **双击 \`联机-云服务器.bat\`**：画面、素材、音频都从这台电脑读取（本机 127.0.0.1:3000，只本机可访问），
+  只有对局同步走云服务器 \`${url}\`。独立模拟和同盟模拟的房间都在云服务器上，
+  和直接打开云服务器网址的朋友在同一个大厅里。
+- **双击 \`启动游戏.bat\`**：和原来一样，本机开服（可离线单人、局域网联机）。
+- 原理：页面网址带 \`?server=wss://…/ws\` 时连接该服务器，并记在浏览器里；\`?server=local\` 恢复连本机。两个 .bat 会自动带上。
+- 注意：本机客户端版本必须与云服务器的游戏版本一致（战斗在浏览器里模拟）；云服务器升级后本包也要更新。
+`;
+}
+
 async function main() {
   const o = parseArgs(process.argv.slice(2));
   if (o.help) { console.log(HELP); return 0; }
+  const cloud = o.cloud ? cloudServerUrl(o.cloud) : null;
+  if (o.cloud && !cloud) { console.error(`✖ --cloud 要写成 wss://host/ws 这样的地址，收到的是 ${o.cloud}`); return 1; }
   const out = path.resolve(o.out || path.join(path.dirname(ROOT), 'Stronghold-Protocol-Windows'));
   const appDir = path.join(out, 'app');
   const nodeDir = path.join(out, 'node');
@@ -557,11 +590,13 @@ async function main() {
   }
 
   await fsp.writeFile(path.join(out, '启动游戏.bat'), bat('"%NODE%" "%HERE%app\\scripts\\launch.mjs" --no-setup %*'), 'latin1');
-  await fsp.writeFile(path.join(out, 'README-开箱即用.md'), bundleReadme({ version: nodeVersion, withNode: !!o.node }), 'utf8');
+  await fsp.writeFile(path.join(out, 'README-开箱即用.md'), bundleReadme({ version: nodeVersion, withNode: !!o.node }) + (cloud ? cloudReadme(cloud) : ''), 'utf8');
+  if (cloud) await fsp.writeFile(path.join(out, '联机-云服务器.bat'), cloudBat(cloud), 'latin1');
 
   const total = await dirSize(out);
   console.log(`\n✔ 便携包已生成：${out}\n  ${total.files} 个文件 / ${MB(total.bytes)}`);
   console.log('  双击「启动游戏.bat」即可（本机开服，浏览器自动打开）。');
+  if (cloud) console.log(`  双击「联机-云服务器.bat」：素材在本机，对局连 ${cloud}`);
   return 0;
 }
 

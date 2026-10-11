@@ -43,6 +43,7 @@ function parseArgs(argv) {
     else if (k === '--host') o.host = val() || o.host;
     else if (a === '--no-open') o.open = false;
     else if (a === '--no-setup') o.setup = false;
+    else if (k === '--server') o.server = String(val() || '');
     else if (a === '-h' || a === '--help') o.help = true;
     else if (a === '--game') o.setupArgs.push(a, argv[++i] ?? '');
     else o.setupArgs.push(a);
@@ -87,7 +88,7 @@ async function main() {
     console.log(src.slice(1, 15).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
     return 0;
   }
-  const localUrl = `http://localhost:${o.port}`;
+  const localUrl = `http://localhost:${o.port}/?server=${encodeURIComponent(o.server || 'local')}`;
 
   const before = await probePort(o.port, o.host);
   if (before.state === 'ours') {
