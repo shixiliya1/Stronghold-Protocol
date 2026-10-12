@@ -54,3 +54,14 @@ npx electron-builder --win nsis --x64 --publish never \
 ```
 
 发布：`.github/workflows/windows-client-release.yml`（Actions → Windows client release → Run workflow，填 tag）。
+
+## 自动跟进上游（`.github/workflows/upstream-sync-build.yml`）
+
+每天 03:17 UTC（台北 11:17）检查上游 `sganggs/Stronghold-Protocol` 的最新 Release；本仓库还没有对应的
+`v<版本>-desktop.N` 时：把上游合并进 master（普通合并，不强推）→ 跑测试 → 推送 → 调用 `windows-client-release.yml` 发布
+`v<版本>-desktop.1`。已构建过就安静结束（手动运行勾选 force 可再出一个 `-desktop.N+1`）。合并有冲突、或上游改了
+`.github/workflows/`（Actions 自带的 GITHUB_TOKEN 不能推送工作流文件）时停下并说明手动同步的步骤（仓库开启 Issues 时会开一个 issue）。
+默认服务器不变：云服务器若还是旧版本，发布说明里会写明，选择页也会提示版本不同。
+
+美术来自上游同版本 Release 的完整包（`.github/scripts/upstream-art.py`，sha256 与 GitHub 公布的 digest 核对），
+其中包括 CI 上无法生成的本地客户端美术（官方 3D 棋盘、HUD 图标、召唤物 / 敌人模型）；上游没有该版本的 Release 时只用 `tools/setup.mjs`。

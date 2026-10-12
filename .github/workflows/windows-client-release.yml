@@ -4,6 +4,10 @@
 #   Stronghold-Protocol-Desktop-Setup-<version>.exe (+ .blockmap, latest.yml)  NSIS installer; electron-updater
 #                                                     updates installed copies from these (differential via blockmap)
 #   Stronghold-Protocol-Desktop-<version>-win-x64.zip  portable; its updater offers the next zip for download
+# Art: the upstream release's full bundle (sganggs/Stronghold-Protocol, same version, sha256 = the digest GitHub
+# publishes) via .github/scripts/upstream-art.py — it carries the local-client art (3D board, HUD icons, summon models)
+# tools/setup.mjs cannot produce on a runner; setup then fills anything missing from the public mirrors.
+# Also callable from other workflows (workflow_call: upstream-sync-build.yml).
 # Optionally also the older portable node.exe bundle (scripts/make-windows-bundle.mjs --cloud). Built on Linux (NSIS
 # needs wine there) for Windows x64.
 name: Windows client release
@@ -25,12 +29,33 @@ on:
         description: Also attach the portable node.exe bundle (+~476 MB)
         type: boolean
         default: false
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to create or update (semver)
+        type: string
+        required: true
+      ref:
+        description: Commit to build (default the calling run's commit)
+        type: string
+        default: ''
+      server:
+        description: Default game server (WebSocket URL)
+        type: string
+        default: wss://stronghold-xili.japaneast.cloudapp.azure.com/ws
+      portable:
+        type: boolean
+        default: false
+      notes:
+        description: Extra text at the top of the release notes
+        type: string
+        default: ''
 
 permissions:
   contents: write
 
 concurrency:
-  group: windows-client-release-${{ github.event.inputs.tag || github.ref_name }}
+  group: windows-client-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -38,9 +63,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      TAG: ${{ github.event.inputs.tag || github.ref_name }}
-      SERVER_URL: ${{ github.event.inputs.server || 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws' }}
-      PORTABLE: ${{ github.event.inputs.portable || 'false' }}
+      TAG: ${{ inputs.tag || github.ref_name }}
+      SERVER_URL: ${{ inputs.server || 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws' }}
+      PORTABLE: ${{ inputs.portable && 'true' || 'false' }}
+      BUILD_REF: ${{ inputs.ref || github.sha }}
     steps:
       - name: Check the tag (semver → app version)
         run: |
@@ -50,6 +76,8 @@ jobs:
           echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BUILD_REF }}
 
       - uses: actions/setup-node@v4
         with:
@@ -62,8 +90,17 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Download game art (~550 MB)
-        run: node tools/setup.mjs -y --no-local
+      - name: Game art from the upstream release (sha256-verified), then setup fills any gaps
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rc=0
+          python3 .github/scripts/upstream-art.py --dest . || rc=$?
+          if [ "$rc" != 0 ] && [ "$rc" != 3 ]; then exit "$rc"; fi
+          node tools/setup.mjs -y --no-local
+          GAME_VERSION=$(node -p "require('./package.json').version")
+          echo "GAME_VERSION=$GAME_VERSION" >> "$GITHUB_ENV"
+          if [ -f data/local-assets.json ]; then echo "LOCAL_ART=yes" >> "$GITHUB_ENV"; else echo "LOCAL_ART=no" >> "$GITHUB_ENV"; fi
 
       - name: Set the default game server
         run: |
@@ -149,12 +186,14 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           name: Windows client ${{ env.TAG }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ env.BUILD_REF }}
           body: |
+            ${{ inputs.notes }}
             卫戍协议：盟约 Windows 桌面客户端 ${{ env.VERSION }}（非官方同人，严禁盈利；游戏素材版权归原权利人，见 NOTICE.md）。
             · 安装版（推荐，可自动更新）：下载 Stronghold-Protocol-Desktop-Setup-${{ env.VERSION }}.exe 运行安装。
             · 便携版：下载 Stronghold-Protocol-Desktop-${{ env.VERSION }}-win-x64.zip，解压后双击「卫戍协议.exe」。
             启动时选择服务器：云服务器联机 / 离线单人 / 本机开服 / 自定义服务器（Ctrl+Shift+M 随时切换）。
+            游戏版本 ${{ env.GAME_VERSION }}（含本地客户端美术：${{ env.LOCAL_ART }}）。云服务器联机需要服务器运行同一游戏版本；版本不同时选择页会提示，可改用离线单人 / 本机开服。
             未签名程序：Windows SmartScreen 提示时点「更多信息 → 仍要运行」。
           files: ${{ steps.files.outputs.list }}
           fail_on_unmatched_files: true

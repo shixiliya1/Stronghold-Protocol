@@ -1,0 +1,113 @@
+# Upstream sync & desktop build — daily at 03:17 UTC (11:17 Taipei) and on demand.
+#
+# 1. check: the latest release of sganggs/Stronghold-Protocol (else package.json on its default branch) vs the fork's
+#    desktop releases v<version>-desktop.N. Already built → the run ends here, quietly (force: build the next N).
+# 2. merge the upstream release into master (a normal merge commit, never a force-push); a conflict or upstream
+#    workflow-file changes stop the run with an issue (or, issues disabled, the job summary) — sync by hand then.
+#    Tests (node --test) must pass before the merge is pushed.
+# 3. release: windows-client-release.yml via workflow_call (events made with GITHUB_TOKEN start no other workflows)
+#    builds and publishes v<version>-desktop.N from the merged commit. The default game server stays as it is: if the
+#    cloud server still runs an older game version, the release notes say so and the in-app picker warns.
+name: Upstream sync & desktop build
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build a new desktop release even if this upstream version was built already
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: upstream-sync-build
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: sganggs/Stronghold-Protocol
+  CLOUD_HEALTHZ: https://stronghold-xili.japaneast.cloudapp.azure.com/healthz
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+      tag: ${{ steps.check.outputs.tag }}
+      ref: ${{ steps.merge.outputs.ref }}
+      notes: ${{ steps.notes.outputs.notes }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FORCE: ${{ inputs.force && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Is there a new upstream version?
+        id: check
+        run: bash .github/scripts/upstream-sync.sh check
+
+      - name: Merge upstream into master
+        id: merge
+        if: steps.check.outputs.build == 'true'
+        env:
+          UREF: ${{ steps.check.outputs.uref }}
+          UTAG: ${{ steps.check.outputs.utag }}
+        run: bash .github/scripts/upstream-sync.sh merge
+
+      - uses: actions/setup-node@v4
+        if: steps.merge.outputs.merged == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Test the merged tree
+        if: steps.merge.outputs.merged == 'true'
+        run: |
+          npm ci --no-audit --no-fund
+          node tools/setup.mjs --check --no-local
+          node --test
+
+      - name: Push the merge to master
+        if: steps.merge.outputs.merged == 'true'
+        run: bash .github/scripts/upstream-sync.sh push
+
+      - name: Release notes (cloud server version)
+        id: notes
+        if: steps.check.outputs.build == 'true'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          UTAG: ${{ steps.check.outputs.utag }}
+        run: |
+          cloud=$(curl -fsS --max-time 10 "$CLOUD_HEALTHZ" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).app||"")}catch{console.log("")}})' || true)
+          {
+            echo "notes<<NOTES_EOF"
+            echo "🤖 自动构建：合并上游 ${UPSTREAM} ${UTAG} 后生成。"
+            if [ -z "$cloud" ]; then
+              echo "⚠️ 构建时没能读取云服务器版本。云服务器若不是 ${VERSION}，「云服务器联机」会在选择页提示版本不同——请先用离线单人 / 本机开服，等云服务器更新。"
+            elif [ "$cloud" != "$VERSION" ]; then
+              echo "⚠️ 云服务器（默认服务器）目前运行的是 ${cloud}，本客户端是 ${VERSION}：云服务器联机会提示版本不同、可能无法正常对局。云服务器更新到 ${VERSION} 之前，请用离线单人 / 本机开服，或继续使用 ${cloud} 版客户端。"
+            else
+              echo "云服务器已是 ${VERSION}，可以直接联机。"
+            fi
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "cloud server app version: ${cloud:-unknown}; client: $VERSION"
+
+  release:
+    needs: sync
+    if: needs.sync.outputs.build == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/windows-client-release.yml
+    with:
+      tag: ${{ needs.sync.outputs.tag }}
+      ref: ${{ needs.sync.outputs.ref }}
+      notes: ${{ needs.sync.outputs.notes }}
