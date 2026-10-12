@@ -1,0 +1,53 @@
+# Headless game server executables (tools/server-bin: Node SEA — server + shared code + game data, NO art, NO web
+# client). Release assets: stronghold-server-<app>-win-x64.exe, -linux-x64, -macos-arm64 (+ .sha256), added to the
+# release of the tag. Each is built and smoke-tested (tools/server-bin/smoke.mjs: rooms, join, chat, 联机大厅) on its
+# own runner (macOS: ad-hoc signed).
+name: Server executables release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to add the executables to (e.g. v0.2.5-desktop.2)
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: server-bin-release-${{ inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Dependencies (ws for the server, postject for the injection)
+        shell: bash
+        run: npm ci --ignore-scripts --no-audit --no-fund && npm i --no-save --no-audit --no-fund postject
+      - name: Build
+        shell: bash
+        run: node tools/server-bin/build.mjs --out dist/server-bin
+      - name: Smoke test (clean dir; create / join / chat / lobby over WebSocket)
+        shell: bash
+        run: node tools/server-bin/smoke.mjs
+      - name: Publish (add to the release)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: |
+            dist/server-bin/stronghold-server-*
+          fail_on_unmatched_files: true
