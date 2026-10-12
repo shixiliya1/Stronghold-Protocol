@@ -22,6 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createProtocolHandler } from './protocol.js';
 import { MODES, normalizeSettings, probeServer, toWsUrl } from './servers.js';
 import { createUpdater } from './updater.js';
+import { artReady, ensureArt, packUrls } from './art.js';
 
 const DEFAULT_SERVER = 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws';
 const TITLE = '卫戍协议：盟约';
@@ -39,6 +40,47 @@ const argOf = (name) => {
   const a = process.argv.find((x) => x.startsWith(`--${name}=`));
   return a ? a.slice(name.length + 3) : null;
 };
+// ---- the art pack (electron/art.js) ------------------------------------------------------------------------------
+// A packaged app carries resources/art-manifest.json and no public/assets: the art lives in userData/art, installed from
+// the art release once and only again when its hash changes. Without a manifest (development) the bundled art is used.
+// Art of an older install (desktop.3 bundled it; the installer moves it to userData/art-migrate) is reused.
+const ART = (() => {
+  const file = process.env.SP_ART_MANIFEST || (app.isPackaged ? path.join(process.resourcesPath, 'art-manifest.json') : '');
+  if (!file || !fs.existsSync(file)) return null;
+  try {
+    const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return { manifest, dir: process.env.SP_ART_DIR || path.join(app.getPath('userData'), 'art'), migrate: path.join(app.getPath('userData'), 'art-migrate') };
+  } catch (e) { console.error('[art] bad manifest', e.message); return null; }
+})();
+let artProgress = null;
+let artRetry = null;
+async function prepareArt() {
+  if (!ART) return;
+  const m = ART.manifest;
+  const info = { tag: m.tag, bytes: m.bytes, files: m.files };
+  const send = (p) => { artProgress = { ...p, info }; if (win && !win.isDestroyed()) win.webContents.send('art:progress', artProgress); };
+  const cleanup = () => { try { fs.rmSync(ART.migrate, { recursive: true, force: true }); } catch { /* ignore */ } };
+  if (await artReady(m, ART.dir)) { cleanup(); console.log(`[art] ready ${m.tag}`); return; }
+  win.loadFile(path.join(HERE, 'ui', 'art.html'));
+  const urls = process.env.SP_ART_URL ? [process.env.SP_ART_URL] : packUrls(m);
+  for (;;) {
+    try {
+      const r = await ensureArt({
+        manifest: m, artDir: ART.dir, urls, moveLegacy: true,
+        legacyDirs: [ART.migrate, ...(app.isPackaged ? [path.join(GAME_ROOT, 'public'), GAME_ROOT] : [])].filter((d) => fs.existsSync(d)),
+        onProgress: send,
+      });
+      console.log(`[art] ${r.status} ${m.tag}: fetched ${r.fetched}, reused ${r.reused}, migrated ${r.migrated || 0}`);
+      cleanup();
+      return;
+    } catch (e) {
+      console.error('[art] failed', e.message);
+      send({ phase: 'error', message: e.message });
+      await new Promise((r) => { artRetry = r; });
+    }
+  }
+}
+
 const cloudServer = () => toWsUrl(argOf('server') || process.env.SP_SERVER || DEFAULT_SERVER) || DEFAULT_SERVER;
 
 // ---- settings (userData/desktop-mode.json) ---------------------------------------------------------------------
@@ -72,7 +114,7 @@ async function startServer(host, port) {
   const c = utilityProcess.fork(path.join(HERE, 'server-host.mjs'), [], {
     serviceName: 'Stronghold Protocol server',
     stdio: 'pipe',
-    env: { ...process.env, SP_GAME_ROOT: GAME_ROOT, SP_HOST: host, SP_PORT: String(port) },
+    env: { ...process.env, ...(ART ? { SP_ART_DIR: ART.dir } : {}), SP_GAME_ROOT: GAME_ROOT, SP_HOST: host, SP_PORT: String(port) },
   });
   c.stdout?.on('data', (d) => process.stdout.write(`[server] ${d}`));
   c.stderr?.on('data', (d) => process.stderr.write(`[server] ${d}`));
@@ -221,6 +263,7 @@ if (!app.requestSingleInstanceLock()) {
       sharedDir: path.join(GAME_ROOT, 'shared'),
       simDir: path.join(GAME_ROOT, 'server', 'sim'),
       packsDir: path.join(GAME_ROOT, 'packs'),
+      artDir: ART ? ART.dir : null,
     });
     const handler = createProtocolHandler(serveStatic, {
       healthz: () => ({ ok: true, version: PROTOCOL_VERSION, app: APP_VERSION }),
@@ -259,6 +302,8 @@ if (!app.requestSingleInstanceLock()) {
       saveSettings({ ...s, servers: Array.isArray(servers) ? servers : s.servers });
       return loadSettings().servers;
     });
+    ipcMain.handle('desktop:art-state', () => artProgress);
+    ipcMain.handle('desktop:art-retry', () => { const r = artRetry; artRetry = null; if (r) r(); });
     ipcMain.handle('desktop:check-update', () => (updater ? updater.check(true) : { status: 'error' }));
 
     const icon = path.join(GAME_ROOT, 'public', 'icons', 'app-512.png');
@@ -315,6 +360,7 @@ if (!app.requestSingleInstanceLock()) {
       getSkip: () => loadSettings().skipVersion,
       setSkip: (v) => saveSettings({ ...loadSettings(), skipVersion: v }),
     });
+    await prepareArt();
     const forced = argOf('mode') || process.env.SP_MODE;
     const s = loadSettings();
     const start = MODES.includes(forced) && forced !== 'custom' ? forced : (s.remember && s.mode ? s.mode : null);

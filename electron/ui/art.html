@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+<title>卫戍协议：盟约</title>
+<link rel="stylesheet" href="chooser.css" />
+<style>
+.art{background:rgba(18,26,23,.92);border:1px solid #2c3a35;border-radius:4px;padding:22px 26px;max-width:640px;margin:0 auto}
+.bar{height:10px;background:#0d1311;border:1px solid #2c3a35;border-radius:999px;overflow:hidden;margin:14px 0 8px}
+.bar i{display:block;height:100%;width:0;background:#4ed8af;transition:width .3s}
+.line{display:flex;justify-content:space-between;color:#9db5ab;font-size:13px}
+.err{color:#ff7a6b;margin-top:10px;word-break:break-all}
+.act{margin-top:14px;display:flex;gap:8px;justify-content:flex-end}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">STRONGHOLD PROTOCOL · ALLIANCE</div>
+    <h1>卫戍协议：<em>盟约</em></h1>
+    <p class="sub">首次启动（或美术资源更新）需要下载一次美术资源包，之后的程序更新不再重复下载。</p>
+  </header>
+  <section class="art">
+    <h2 id="title">正在检查美术资源…</h2>
+    <div class="bar"><i id="fill"></i></div>
+    <div class="line"><span id="files"></span><span id="bytes"></span></div>
+    <div class="line"><span id="src"></span><span id="speed"></span></div>
+    <div class="err" id="err" hidden></div>
+    <div class="act"><button class="primary" id="retry" hidden>重试（从断点继续）</button></div>
+  </section>
+  <footer><span class="ver" id="ver"></span></footer>
+</main>
+<script src="art.js"></script>
+</body>
+</html>

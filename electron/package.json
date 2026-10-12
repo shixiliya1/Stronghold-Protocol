@@ -23,11 +23,13 @@
     "executableName": "卫戍协议",
     "artifactName": "Stronghold-Protocol-Desktop-${version}-win-x64.${ext}",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "files": [
       "main.js",
       "protocol.js",
+      "art.js",
       "servers.js",
       "updater.js",
       "update-check.js",
@@ -42,12 +44,17 @@
         "to": "game/public",
         "filter": [
           "**/*",
-          "!dev/**"
+          "!dev/**",
+          "!assets/**"
         ]
       },
       {
         "from": "../data",
-        "to": "game/data"
+        "to": "game/data",
+        "filter": [
+          "**/*",
+          "!local-assets.json"
+        ]
       },
       {
         "from": "../shared",
@@ -79,6 +86,10 @@
       {
         "from": "../THIRD-PARTY-NOTICES.md",
         "to": "THIRD-PARTY-NOTICES.md"
+      },
+      {
+        "from": "art-manifest.json",
+        "to": "art-manifest.json"
       }
     ],
     "win": {
@@ -113,7 +124,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "卫戍协议",
       "artifactName": "Stronghold-Protocol-Desktop-Setup-${version}.${ext}",
-      "differentialPackage": true
+      "differentialPackage": true,
+      "include": "build/installer.nsh"
     }
   },
   "dependencies": {

@@ -59,7 +59,7 @@ export {
 export async function startServer(opts = {}) {
   const { port, host } = listenAddress(opts);
   const log = opts.log || makeLogger(!!opts.quiet);
-  const { publicDir, dataDir, sharedDir, packsDir } = serveDirs(opts);
+  const { publicDir, dataDir, sharedDir, packsDir, artDir } = serveDirs(opts);
 
   // The process-wide singleton serves the default data dir; a custom dir (tests) gets its own copy.
   const data = opts.dataDir ? loadData(dataDir, { log }) : getData({ dir: dataDir, log });
@@ -67,7 +67,7 @@ export async function startServer(opts = {}) {
   // content packs (docs/PACKS.md): scanned now — the start log names them — and again whenever their folders change
   const packs = createPackRegistry({ publicDir, dataDir, packsDir }, { log });
   packs.refresh(true);
-  const serveStatic = createStaticHandler({ publicDir, dataDir, sharedDir, packsDir, packs, log });
+  const serveStatic = createStaticHandler({ publicDir, dataDir, sharedDir, packsDir, packs, log, artDir });
   const startedAt = Date.now();
   // The tag is per process (see buildTag): read the browser runtime once, here, not on every /healthz.
   resetBuildTag();

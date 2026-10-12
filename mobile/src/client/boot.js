@@ -10,6 +10,8 @@
   var halt = function (to) { location.replace(to); document.write('<plaintext style="display:none">'); }; // swallow the rest of the page
   var get = function (s, k) { try { return s.getItem(k); } catch (e) { return null; } };
 
+  // Android without the art pack installed yet: the picker downloads it first (client/art-ui.js)
+  if (window.SP_ART && window.SP_ART.pack && !window.SP_ART.ready) { halt(picker); return; }
   if (C.platform === 'pages' && 'serviceWorker' in navigator && !navigator.serviceWorker.controller) { halt(picker); return; }
 
   var settings = {};

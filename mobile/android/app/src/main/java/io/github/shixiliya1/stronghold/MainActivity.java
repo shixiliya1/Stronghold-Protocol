@@ -8,11 +8,13 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
-/** 卫戍协议: full screen (immersive, swipe to show the system bars), landscape (manifest), screen kept on, no page zoom. */
+/** 卫戍协议: the art is served from filesDir/art (ArtWebViewClient, ArtPackPlugin); full screen (immersive, swipe to show the system bars), landscape (manifest), screen kept on, no page zoom. */
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(ArtPackPlugin.class);
         super.onCreate(savedInstanceState);
+        getBridge().setWebViewClient(new ArtWebViewClient(getBridge(), this));
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         WebSettings ws = getBridge().getWebView().getSettings();
         ws.setSupportZoom(false);

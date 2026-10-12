@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('spDesktop', {
   normalize: (url) => ipcRenderer.invoke('desktop:normalize', url),
   saveServers: (list) => ipcRenderer.invoke('desktop:servers', list),
   checkUpdate: () => ipcRenderer.invoke('desktop:check-update'),
+  artState: () => ipcRenderer.invoke('desktop:art-state'),
+  artRetry: () => ipcRenderer.invoke('desktop:art-retry'),
+  onArtProgress: (fn) => { ipcRenderer.on('art:progress', (_e, p) => fn(p)); },
 });
 
 window.addEventListener('DOMContentLoaded', async () => {

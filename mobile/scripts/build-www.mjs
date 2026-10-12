@@ -5,6 +5,8 @@
 //
 //   node scripts/build-www.mjs [--target android|pages] [--out DIR] [--base /Stronghold-Protocol/]
 //                              [--cloud wss://host/ws] [--version 0.2.4-android.1] [--no-art-copy]
+//                              [--art-pack DIR/art-pack.json]   (android: no art in www; the app downloads that pack —
+//                                                                ArtPackPlugin / ArtWebViewClient, client/art-ui.js)
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -21,6 +23,7 @@ let BASE = arg('base', '/');
 if (!BASE.endsWith('/')) BASE += '/';
 const CLOUD = arg('cloud', 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws');
 const GAME = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+const ART_PACK = arg('art-pack', null);
 const VERSION = arg('version', JSON.parse(fs.readFileSync(path.join(MOBILE, 'package.json'), 'utf8')).version);
 const { PROTOCOL_VERSION } = await import(pathToFileURL(path.join(ROOT, 'shared', 'constants.js')).href);
 
@@ -35,8 +38,9 @@ async function copyDir(src, dst, filter = () => true) {
 }
 
 await fsp.rm(OUT, { recursive: true, force: true });
-await copyDir(path.join(ROOT, 'public'), OUT, (f) => !f.includes(`${path.sep}dev${path.sep}`));
-await copyDir(path.join(ROOT, 'data'), path.join(OUT, 'data'));
+const ART_DIR = `${path.sep}public${path.sep}assets${path.sep}`;
+await copyDir(path.join(ROOT, 'public'), OUT, (f) => !f.includes(`${path.sep}dev${path.sep}`) && !(ART_PACK && f.includes(ART_DIR)));
+await copyDir(path.join(ROOT, 'data'), path.join(OUT, 'data'), (f) => !(ART_PACK && path.basename(f) === 'local-assets.json'));
 await copyDir(path.join(ROOT, 'shared'), path.join(OUT, 'shared'));
 await copyDir(path.join(ROOT, 'server', 'sim'), path.join(OUT, 'sim'), (f) => f.endsWith('.js') && path.basename(f).toLowerCase() !== 'nodedata.js');
 if (fs.existsSync(path.join(ROOT, 'packs'))) await copyDir(path.join(ROOT, 'packs'), path.join(OUT, 'packs'));
@@ -72,10 +76,17 @@ chooser = chooser
   .replace(/script-src 'self'/, "script-src 'self'; connect-src 'self' https: wss: ws: http:")
   .replace('<meta charset="utf-8" />', '<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />')
   .replace('<link rel="stylesheet" href="chooser.css" />', '<link rel="stylesheet" href="chooser.css" />\n<link rel="stylesheet" href="mobile.css" />\n<link rel="manifest" href="../manifest.json" />')
-  .replace('<script src="chooser.js"></script>', '<script src="config.js"></script>\n<script src="web-api.js"></script>\n<script src="chooser.js"></script>');
+  .replace('<script src="chooser.js"></script>', '<script src="config.js"></script>\n<script src="art-state.js"></script>\n<script src="art-ui.js"></script>\n<script src="web-api.js"></script>\n<script src="chooser.js"></script>');
 await fsp.writeFile(path.join(CL, 'index.html'), chooser);
 const config = { platform: target, version: VERSION, game: GAME, protocol: PROTOCOL_VERSION, cloud: CLOUD, base: BASE,
   repo: 'shixiliya1/Stronghold-Protocol', offlineUrl: 'ws://offline.invalid/ws' };
+// art state: answered live by the Android app (ArtWebViewClient); this stand-in = no separate art pack
+await fsp.writeFile(path.join(CL, 'art-state.js'), 'window.SP_ART = null;\n');
+if (ART_PACK) {
+  const p = JSON.parse(fs.readFileSync(ART_PACK, 'utf8'));
+  await fsp.writeFile(path.join(CL, 'art-pack.json'), JSON.stringify(p, null, 2));
+  config.art = { tag: p.tag, hash: p.hash, bytes: p.zipSize };
+}
 await fsp.writeFile(path.join(CL, 'config.js'), `window.SP_CLIENT = ${JSON.stringify(config)};\n`);
 
 await build({
@@ -105,7 +116,7 @@ await build({
 // index.html: the boot script runs first (mode → server, offline socket, Pages service worker)
 const idxPath = path.join(OUT, 'index.html');
 let idx = fs.readFileSync(idxPath, 'utf8');
-idx = idx.replace('<meta charset="utf-8" />', '<meta charset="utf-8" />\n  <script src="client/config.js"></script>\n  <script src="client/boot.js"></script>');
+idx = idx.replace('<meta charset="utf-8" />', '<meta charset="utf-8" />\n  <script src="client/config.js"></script>\n  <script src="client/art-state.js"></script>\n  <script src="client/boot.js"></script>');
 if (target === 'pages') {
   // The page keeps its root-relative URLs (/js/…, /sim/…, ../../shared/ clamping at the root): the service worker
   // answers every same-origin /x outside BASE with BASE/x under the *requested* URL, so module identity is unchanged.

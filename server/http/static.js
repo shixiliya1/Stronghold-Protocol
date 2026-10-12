@@ -55,7 +55,11 @@ const EMPTY_LOCAL_ART = Buffer.from(JSON.stringify({ version: 1, source: 'none',
  *   packs: the server's pack registry (default: one over publicDir, dataDir and packsDir — ROOT/packs)
  * @returns {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, rawPath: string, query: string) => Promise<void>}
  */
-export function createStaticHandler({ publicDir, dataDir, sharedDir, simDir = path.join(ROOT, 'server', 'sim'), packsDir = path.join(ROOT, 'packs'), packs = null, log = noopLog }) {
+export function createStaticHandler({ publicDir, dataDir, sharedDir, simDir = path.join(ROOT, 'server', 'sim'), packsDir = path.join(ROOT, 'packs'), packs = null, log = noopLog, artDir = null }) {
+  // Optional separate art directory (the desktop / Android clients install the art pack apart from the program):
+  // `<artDir>/assets/…` answers /assets/… (and /media/…) and `<artDir>/data/local-assets.json` the local-art manifest,
+  // each falling back to public/ and data/ when the file is not there.
+  const art = artDir ? path.resolve(artDir) : null;
   const registry = packs || createPackRegistry({ publicDir, dataDir, packsDir }, { log: /** @type {any} */ (log) });
   const mounts = [
     { prefix: '/data/', name: 'data', dir: path.resolve(dataDir) },
@@ -94,8 +98,21 @@ export function createStaticHandler({ publicDir, dataDir, sharedDir, simDir = pa
     }
     // Extension-less audio (download-manager avoidance): /media/bgm/act1 → /assets/audio/bgm/act1.mp3
     if (decoded.startsWith(MEDIA_PREFIX)) {
-      await serveMedia(req, res, decoded.slice(MEDIA_PREFIX.length), query, publicDir, gzipCache, log);
+      const audioRoot = art && (await fsp.stat(path.join(art, 'assets', 'audio')).catch(() => null))?.isDirectory() ? art : publicDir;
+      await serveMedia(req, res, decoded.slice(MEDIA_PREFIX.length), query, audioRoot, gzipCache, log);
       return;
+    }
+    // The separate art directory first (see artDir above)
+    if (art && (decoded.startsWith('/assets/') || decoded === `/data/${LOCAL_ART_MANIFEST}`)) {
+      const segs = decoded.slice(1).split('/').filter((x) => x.length > 0);
+      if (!segs.some((x) => x === '..' || x === '.' || x.startsWith('.'))) {
+        const abs = path.join(art, ...segs);
+        const st = abs.startsWith(art + path.sep) ? await fsp.stat(abs).catch(() => null) : null;
+        if (st && st.isFile()) {
+          await serveFile(req, res, abs, st, segs[0] === 'data' ? 'data' : 'public', segs[0] === 'data' ? segs.slice(1) : segs, query, gzipCache, log);
+          return;
+        }
+      }
     }
     // Bare mount paths (e.g. "/data") → treat as the mount directory.
     const mount = mounts.find((m) => decoded.startsWith(m.prefix) || decoded === m.prefix.slice(0, -1)) || mounts[mounts.length - 1];

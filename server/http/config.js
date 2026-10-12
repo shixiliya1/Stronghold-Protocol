@@ -61,6 +61,8 @@ export function serveDirs(opts) {
     dataDir: opts.dataDir || path.join(ROOT, 'data'),
     sharedDir: opts.sharedDir || path.join(ROOT, 'shared'),
     packsDir: opts.packsDir || path.join(ROOT, 'packs'),
+    // a separate art directory (static.js artDir): the desktop app's installed art pack; env SP_ART_DIR
+    artDir: opts.artDir || process.env.SP_ART_DIR || null,
   };
 }
 

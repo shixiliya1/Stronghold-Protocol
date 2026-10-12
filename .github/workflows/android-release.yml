@@ -1,4 +1,6 @@
-# Android client (mobile/, Capacitor): the browser client in an app — every game file inside the APK (local rendering),
+# Android client (mobile/, Capacitor): the browser client in an app — the program inside the APK, the art as a separate
+# pack (release art-<hash12>, publish-art.sh) downloaded on first start into app storage and served locally (ArtPackPlugin,
+# ArtWebViewClient); an update with unchanged art only replaces the APK.
 # server picker: cloud / offline single-player (the game server runs inside the WebView) / custom servers; checks the
 # fork's Releases for a newer APK on start. Signed with the release keystore from the repo secrets ANDROID_KEYSTORE_BASE64,
 # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (without them: debug-signed, and the notes say so).
@@ -93,10 +95,16 @@ jobs:
           echo "GAME_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
           if [ -f data/local-assets.json ]; then echo "LOCAL_ART=yes" >> "$GITHUB_ENV"; else echo "LOCAL_ART=no" >> "$GITHUB_ENV"; fi
 
+      - name: Art pack (published once per art hash as release art-<hash12>; the APK downloads it on first start)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/publish-art.sh "$RUNNER_TEMP/art"
+
       - name: Web client → Capacitor project
         working-directory: mobile
         run: |
-          node scripts/build-www.mjs --target android --version "$VERSION" --cloud "$SERVER_URL"
+          node scripts/build-www.mjs --target android --version "$VERSION" --cloud "$SERVER_URL" --art-pack "$RUNNER_TEMP/art/art-pack.json"
+          if [ -d www/assets ]; then echo "::error::art bundled in the APK"; exit 1; fi
           du -sh www
           npx cap sync android
 
@@ -149,7 +157,7 @@ jobs:
           body: |
             ${{ inputs.notes }}
             📱 安卓版 ${{ env.VERSION }}：下载 Stronghold-Protocol-Android-${{ env.VERSION }}.apk，在手机上打开安装（需允许「安装未知应用」）。
-            启动时选择：云服务器联机 / 离线单人（游戏服务器在手机上运行，不需要联网）/ 自定义服务器。所有画面素材都在 APK 里，本地渲染。启动时会检查新版本。
+            启动时选择：云服务器联机 / 离线单人（游戏服务器在手机上运行，不需要联网）/ 自定义服务器。美术资源与程序分离：APK 只含程序，首次启动下载一次美术资源包 ${{ env.ART_TAG }}（sha256 校验，断点续传，失败自动换镜像），之后只更新 APK，美术未变化时不再下载；本地渲染。启动时会检查新版本。
             游戏版本 ${{ env.GAME_VERSION }}（含本地客户端美术：${{ env.LOCAL_ART }}）；签名：${{ env.SIGNED }}。
           files: |
             ${{ env.APK }}
