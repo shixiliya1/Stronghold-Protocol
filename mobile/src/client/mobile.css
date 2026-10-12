@@ -1,0 +1,10 @@
+/* touch tweaks for the picker on phones (landscape, small height) */
+html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; overscroll-behavior: none; }
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+button, input { min-height: 36px; }
+input { font-size: 16px; } /* no iOS focus zoom */
+@media (max-height: 480px) {
+  header h1 { font-size: 26px; margin: 4px 0; }
+  header .sub, header .kicker { font-size: 12px; }
+  main { padding-top: 8px; padding-bottom: 8px; }
+}

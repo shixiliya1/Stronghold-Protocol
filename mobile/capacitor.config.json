@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.shixiliya1.stronghold",
+  "appName": "卫戍协议",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -1,0 +1,157 @@
+# Android client (mobile/, Capacitor): the browser client in an app — every game file inside the APK (local rendering),
+# server picker: cloud / offline single-player (the game server runs inside the WebView) / custom servers; checks the
+# fork's Releases for a newer APK on start. Signed with the release keystore from the repo secrets ANDROID_KEYSTORE_BASE64,
+# ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (without them: debug-signed, and the notes say so).
+# Release asset: Stronghold-Protocol-Android-<version>.apk (+ .sha256), added to the release of the tag (created when
+# missing; an android-only release is never marked "Latest", so the desktop updater keeps reading the desktop release).
+# Called by upstream-sync-build.yml after the Windows build (same tag), or run by hand / on a v*-android.* tag.
+name: Android client release
+
+on:
+  push:
+    tags: ['v*-android.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to create or add the APK to (semver, e.g. v0.2.4-android.1)
+        required: true
+        default: v0.2.4-android.1
+      server:
+        description: Default game server (WebSocket URL)
+        required: true
+        default: wss://stronghold-xili.japaneast.cloudapp.azure.com/ws
+  workflow_call:
+    inputs:
+      tag: { type: string, required: true }
+      ref: { type: string, default: '' }
+      server: { type: string, default: 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws' }
+      notes: { type: string, default: '' }
+    secrets:
+      ANDROID_KEYSTORE_BASE64: { required: false }
+      ANDROID_KEYSTORE_PASSWORD: { required: false }
+      ANDROID_KEY_ALIAS: { required: false }
+      ANDROID_KEY_PASSWORD: { required: false }
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      SERVER_URL: ${{ inputs.server || 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws' }}
+      BUILD_REF: ${{ inputs.ref || github.sha }}
+    steps:
+      - name: Check the tag (semver → app version)
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag '$TAG' is not vX.Y.Z or vX.Y.Z-pre"; exit 1
+          fi
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          # versionCode: minutes since 2026-01-01 — always increasing, so every build installs over the previous one
+          echo "VERSION_CODE=$(( ($(date +%s) - 1767225600) / 60 ))" >> "$GITHUB_ENV"
+          case "$TAG" in *-android.*) echo "STANDALONE=true" >> "$GITHUB_ENV";; *) echo "STANDALONE=false" >> "$GITHUB_ENV";; esac
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BUILD_REF }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          (cd mobile && npm ci --no-audit --no-fund)
+
+      - name: Game art from the upstream release (sha256-verified), then setup fills any gaps
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rc=0
+          python3 .github/scripts/upstream-art.py --dest . || rc=$?
+          if [ "$rc" != 0 ] && [ "$rc" != 3 ]; then exit "$rc"; fi
+          node tools/setup.mjs -y --no-local
+          echo "GAME_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+          if [ -f data/local-assets.json ]; then echo "LOCAL_ART=yes" >> "$GITHUB_ENV"; else echo "LOCAL_ART=no" >> "$GITHUB_ENV"; fi
+
+      - name: Web client → Capacitor project
+        working-directory: mobile
+        run: |
+          node scripts/build-www.mjs --target android --version "$VERSION" --cloud "$SERVER_URL"
+          du -sh www
+          npx cap sync android
+
+      - name: Smoke test (offline single-player in a phone-sized headless Chrome)
+        continue-on-error: true
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: timeout 600 node mobile/scripts/smoke.mjs --www mobile/www --out "$RUNNER_TEMP/shots"
+
+      - name: Release keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KS_KEYPASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ]; then
+            printf '%s' "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            {
+              echo "SP_KEYSTORE=$RUNNER_TEMP/release.jks"
+              echo "SP_KEYSTORE_PASSWORD=$KS_PASS"
+              echo "SP_KEY_ALIAS=${KS_ALIAS:-stronghold}"
+              echo "SP_KEY_PASSWORD=${KS_KEYPASS:-$KS_PASS}"
+            } >> "$GITHUB_ENV"
+            echo "SIGNED=release key" >> "$GITHUB_ENV"
+          else
+            echo "::warning::no release keystore secrets — the APK is signed with a debug key"
+            echo "SIGNED=debug key (no keystore secrets)" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build the APK
+        working-directory: mobile/android
+        run: |
+          ./gradlew --no-daemon assembleRelease -PspVersionCode="$VERSION_CODE" -PspVersionName="$VERSION"
+          APK="$RUNNER_TEMP/Stronghold-Protocol-Android-$VERSION.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --print-certs "$APK" | head -3
+          (cd "$RUNNER_TEMP" && sha256sum "$(basename "$APK")" | tee "$APK.sha256")
+          ls -l "$APK"
+          echo "APK=$APK" >> "$GITHUB_ENV"
+
+      - name: Publish (add to the release)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.STANDALONE == 'true' && format('Android client {0}', env.TAG) || '' }}
+          target_commitish: ${{ env.BUILD_REF }}
+          make_latest: ${{ env.STANDALONE == 'true' && 'false' || 'true' }}
+          append_body: true
+          body: |
+            ${{ inputs.notes }}
+            📱 安卓版 ${{ env.VERSION }}：下载 Stronghold-Protocol-Android-${{ env.VERSION }}.apk，在手机上打开安装（需允许「安装未知应用」）。
+            启动时选择：云服务器联机 / 离线单人（游戏服务器在手机上运行，不需要联网）/ 自定义服务器。所有画面素材都在 APK 里，本地渲染。启动时会检查新版本。
+            游戏版本 ${{ env.GAME_VERSION }}（含本地客户端美术：${{ env.LOCAL_ART }}）；签名：${{ env.SIGNED }}。
+          files: |
+            ${{ env.APK }}
+            ${{ env.APK }}.sha256
+          fail_on_unmatched_files: true

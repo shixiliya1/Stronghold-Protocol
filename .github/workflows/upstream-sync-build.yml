@@ -8,6 +8,7 @@
 # 3. release: windows-client-release.yml via workflow_call (events made with GITHUB_TOKEN start no other workflows)
 #    builds and publishes v<version>-desktop.N from the merged commit. The default game server stays as it is: if the
 #    cloud server still runs an older game version, the release notes say so and the in-app picker warns.
+# 4. android: android-release.yml adds the signed APK to the same release; pages: pages.yml redeploys the web client.
 name: Upstream sync & desktop build
 
 on:
@@ -23,6 +24,8 @@ on:
 permissions:
   contents: write
   issues: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: upstream-sync-build
@@ -111,3 +114,25 @@ jobs:
       tag: ${{ needs.sync.outputs.tag }}
       ref: ${{ needs.sync.outputs.ref }}
       notes: ${{ needs.sync.outputs.notes }}
+
+  android:
+    needs: [sync, release]
+    if: needs.sync.outputs.build == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/android-release.yml
+    with:
+      tag: ${{ needs.sync.outputs.tag }}
+      ref: ${{ needs.sync.outputs.ref }}
+    secrets: inherit
+
+  pages:
+    needs: [sync, release]
+    if: needs.sync.outputs.build == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
+    with:
+      ref: ${{ needs.sync.outputs.ref }}
