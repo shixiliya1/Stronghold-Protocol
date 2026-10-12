@@ -74,8 +74,11 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends wine64 wine32:i386 > /dev/null
-          wine --version || wine64 --version
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends wine wine64 wine32:i386 > /dev/null
+          # the `wine` command comes from package `wine`; fall back to the wine64 loader if a release lacks it
+          if ! command -v wine > /dev/null && [ -x /usr/lib/wine/wine64 ]; then sudo ln -sf /usr/lib/wine/wine64 /usr/local/bin/wine; fi
+          command -v wine
+          wine --version
 
       - name: Build the desktop app (Windows x64, NSIS installer + unpacked folder)
         working-directory: electron
