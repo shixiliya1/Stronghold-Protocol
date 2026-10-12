@@ -103,6 +103,11 @@ document.querySelectorAll('button.card').forEach((b) => b.addEventListener('clic
   if (m === 'cloud') choose('cloud', {}, st.cloud, $('#probe-cloud'));
   else choose(m);
 }));
+// 存储管理 (ui/storage-ui.js): art pack, download cache, leftovers, free space; verify / repair / delete / download
+if (api.storageInfo && window.SPStorage && $('#storage')) {
+  $('#storage').hidden = false;
+  $('#storage').addEventListener('click', () => window.SPStorage.open(api));
+}
 $('#update').addEventListener('click', async () => {
   $('#update').disabled = true;
   try { await api.checkUpdate(); } finally { $('#update').disabled = false; }

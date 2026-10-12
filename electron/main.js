@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createProtocolHandler } from './protocol.js';
 import { MODES, normalizeSettings, probeServer, toWsUrl } from './servers.js';
 import { createUpdater } from './updater.js';
-import { artReady, ensureArt, packUrls } from './art.js';
+import { STATE_FILE, artReady, ensureArt, packUrls, artStorage, clearPartials, removeLeftovers, verifyArt } from './art.js';
 
 const DEFAULT_SERVER = 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws';
 const TITLE = '卫戍协议：盟约';
@@ -54,31 +54,94 @@ const ART = (() => {
 })();
 let artProgress = null;
 let artRetry = null;
-async function prepareArt() {
-  if (!ART) return;
+let artSkip = null;
+/**
+ * Install / repair the art pack (art.html shows the progress). 「跳过，先进入游戏」 (desktop:art-skip) stops it at any
+ * point — the game then runs without (some) art: missing files are 404s the page renders around. A later
+ * 「下载美术资源」 (存储管理) resumes: files already downloaded and verified are kept.
+ * @param {{ force?: boolean }} [o] force: run ensureArt even when the quick check passes (repair after verify)
+ * @returns {Promise<'none'|'ready'|'installed'|'skipped'>}
+ */
+async function prepareArt({ force = false } = {}) {
+  if (!ART) return 'none';
   const m = ART.manifest;
   const info = { tag: m.tag, bytes: m.bytes, files: m.files };
   const send = (p) => { artProgress = { ...p, info }; if (win && !win.isDestroyed()) win.webContents.send('art:progress', artProgress); };
   const cleanup = () => { try { fs.rmSync(ART.migrate, { recursive: true, force: true }); } catch { /* ignore */ } };
-  if (await artReady(m, ART.dir)) { cleanup(); console.log(`[art] ready ${m.tag}`); return; }
+  if (!force && await artReady(m, ART.dir)) { cleanup(); console.log(`[art] ready ${m.tag}`); return 'ready'; }
+  artProgress = null;
   win.loadFile(path.join(HERE, 'ui', 'art.html'));
+  const ctl = new AbortController();
+  const skipped = new Promise((r) => { artSkip = () => { ctl.abort(); r('skipped'); }; });
   const urls = process.env.SP_ART_URL ? [process.env.SP_ART_URL] : packUrls(m);
-  for (;;) {
-    try {
-      const r = await ensureArt({
-        manifest: m, artDir: ART.dir, urls, moveLegacy: true,
+  try {
+    for (;;) {
+      const job = ensureArt({
+        manifest: m, artDir: ART.dir, urls, moveLegacy: true, signal: ctl.signal,
         legacyDirs: [ART.migrate, ...(app.isPackaged ? [path.join(GAME_ROOT, 'public'), GAME_ROOT] : [])].filter((d) => fs.existsSync(d)),
         onProgress: send,
       });
-      console.log(`[art] ${r.status} ${m.tag}: fetched ${r.fetched}, reused ${r.reused}, migrated ${r.migrated || 0}`);
-      cleanup();
-      return;
-    } catch (e) {
-      console.error('[art] failed', e.message);
-      send({ phase: 'error', message: e.message });
-      await new Promise((r) => { artRetry = r; });
+      job.catch(() => {}); // a skip abandons it
+      try {
+        const r = await Promise.race([job, skipped]);
+        if (r === 'skipped') { console.log('[art] skipped by the player'); return 'skipped'; }
+        console.log(`[art] ${r.status} ${m.tag}: fetched ${r.fetched}, reused ${r.reused}, migrated ${r.migrated || 0}`);
+        cleanup();
+        return 'installed';
+      } catch (e) {
+        if (ctl.signal.aborted) return 'skipped';
+        console.error('[art] failed', e.message);
+        send({ phase: 'error', message: e.message });
+        const w = await Promise.race([new Promise((r) => { artRetry = r; }), skipped]);
+        if (w === 'skipped') return 'skipped';
+      }
     }
+  } finally { artSkip = null; artRetry = null; }
+}
+
+const diskFree = (dir) => {
+  try { const s = fs.statfsSync(dir); return { free: s.bavail * s.bsize, size: s.blocks * s.bsize }; } catch { return null; }
+};
+/** 存储管理: rows + actions for ui/storage-ui.js. */
+async function storageInfo() {
+  const userData = app.getPath('userData');
+  const disk = diskFree(userData);
+  if (!ART) {
+    return { title: '存储管理', rows: [{ id: 'art', label: '美术资源', text: '随程序附带（开发版），无需管理' }, ...(disk ? [{ id: 'free', label: '磁盘可用空间', bytes: disk.free, of: disk.size }] : [])], actions: [] };
   }
+  const a = await artStorage(ART.manifest, ART.dir, { extraDirs: [ART.migrate] });
+  return {
+    title: '存储管理',
+    rows: [
+      { id: 'art', label: `美术资源包 ${a.tag}`, bytes: a.artBytes, of: a.total, text: a.ready ? `已安装 · ${a.artFiles} 个文件` : `未完整安装 · ${a.artFiles} / ${a.files} 个文件` },
+      { id: 'cache', label: '下载缓存（未完成的分段）', bytes: a.partBytes },
+      { id: 'leftover', label: '旧版美术残留', bytes: a.leftoverBytes, text: a.leftoverFiles ? `${a.leftoverFiles} 个文件` : '无' },
+      ...(disk ? [{ id: 'free', label: '磁盘可用空间', bytes: disk.free, of: disk.size }] : []),
+      { id: 'path', label: '位置', text: ART.dir },
+    ],
+    actions: [
+      { id: 'clear-cache', label: '清除下载缓存' },
+      { id: 'remove-leftover', label: '删除旧版美术残留' },
+      { id: 'verify', label: '校验并修复美术', note: '逐个检查 sha256，损坏的文件重新下载' },
+      { id: 'redownload', label: a.ready ? '重新下载美术资源' : '下载美术资源' },
+      { id: 'delete-art', label: '删除全部美术', danger: true, confirm: '删除全部美术资源？之后游戏以无美术模式运行，可随时在这里重新下载。' },
+    ],
+  };
+}
+async function storageAction(id) {
+  if (!ART) return { error: '开发版：美术随程序附带' };
+  const m = ART.manifest;
+  if (id === 'clear-cache') { const n = await clearPartials(ART.dir); return { ok: true, message: `已清除 ${(n / 1048576).toFixed(1)} MB 下载缓存` }; }
+  if (id === 'remove-leftover') { await removeLeftovers(m, ART.dir, { extraDirs: [ART.migrate] }); return { ok: true, message: '已删除旧版美术残留' }; }
+  if (id === 'delete-art') { fs.rmSync(ART.dir, { recursive: true, force: true }); return { ok: true, message: '已删除全部美术资源，游戏将以无美术模式运行' }; }
+  if (id === 'verify' || id === 'redownload') {
+    let bad = null;
+    if (id === 'verify') bad = (await verifyArt(m, ART.dir)).bad;
+    else fs.rmSync(path.join(ART.dir, STATE_FILE), { force: true });
+    setTimeout(async () => { const r = await prepareArt({ force: true }); showChooser(r === 'skipped' ? '美术资源下载已跳过，可在「存储管理」里继续' : ''); }, 50);
+    return { ok: true, navigating: true, message: bad ? `校验完成：${bad.length} 个文件损坏，正在重新下载` : '正在下载美术资源…' };
+  }
+  return { error: `unknown action ${id}` };
 }
 
 const cloudServer = () => toWsUrl(argOf('server') || process.env.SP_SERVER || DEFAULT_SERVER) || DEFAULT_SERVER;
@@ -304,6 +367,9 @@ if (!app.requestSingleInstanceLock()) {
     });
     ipcMain.handle('desktop:art-state', () => artProgress);
     ipcMain.handle('desktop:art-retry', () => { const r = artRetry; artRetry = null; if (r) r(); });
+    ipcMain.handle('desktop:art-skip', () => { if (artSkip) artSkip(); });
+    ipcMain.handle('desktop:storage-info', () => storageInfo());
+    ipcMain.handle('desktop:storage-action', (_e, id) => storageAction(String(id || '')));
     ipcMain.handle('desktop:check-update', () => (updater ? updater.check(true) : { status: 'error' }));
 
     const icon = path.join(GAME_ROOT, 'public', 'icons', 'app-512.png');

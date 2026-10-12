@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('spDesktop', {
   checkUpdate: () => ipcRenderer.invoke('desktop:check-update'),
   artState: () => ipcRenderer.invoke('desktop:art-state'),
   artRetry: () => ipcRenderer.invoke('desktop:art-retry'),
+  artSkip: () => ipcRenderer.invoke('desktop:art-skip'),
+  storageInfo: () => ipcRenderer.invoke('desktop:storage-info'),
+  storageAction: (id) => ipcRenderer.invoke('desktop:storage-action', id),
   onArtProgress: (fn) => { ipcRenderer.on('art:progress', (_e, p) => fn(p)); },
 });
 

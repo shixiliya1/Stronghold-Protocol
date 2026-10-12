@@ -32,3 +32,4 @@ function show(p) {
 window.spDesktop.onArtProgress(show);
 window.spDesktop.artState().then(show);
 $('retry').addEventListener('click', () => { $('retry').hidden = true; window.spDesktop.artRetry(); });
+$('skip').addEventListener('click', () => { $('skip').disabled = true; $('title').textContent = '正在进入游戏（无美术模式）…'; window.spDesktop.artSkip(); });

@@ -9,7 +9,7 @@ const VERSION = '__VERSION__';
 const SHELL = `sp-shell-${VERSION}`;
 const ART = 'sp-art-v1';
 const PRECACHE = ['', 'index.html', 'client/', 'client/index.html', 'client/config.js', 'client/boot.js', 'client/web-api.js',
-  'client/chooser.js', 'client/chooser.css', 'client/mobile.css', 'client/servers.js', 'client/update-check.js', 'manifest.json', 'data.js', 'healthz'];
+  'client/chooser.js', 'client/storage-ui.js', 'client/storage.js', 'client/chooser.css', 'client/mobile.css', 'client/servers.js', 'client/update-check.js', 'manifest.json', 'data.js', 'healthz'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE.map((p) => BASE + p))).catch(() => {}).then(() => self.skipWaiting()));

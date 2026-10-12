@@ -218,3 +218,68 @@ async function prune(artDir, wanted) {
   };
   await walk(artDir, '');
 }
+
+// ---- storage management (存储管理: ui/storage-ui.js through main.js) ----------------------------------------------
+
+async function walkFiles(dir, rel, out) {
+  let list;
+  try { list = await fsp.readdir(dir, { withFileTypes: true }); } catch { return out; }
+  for (const d of list) {
+    const r = rel ? `${rel}/${d.name}` : d.name;
+    const full = path.join(dir, d.name);
+    if (d.isDirectory()) await walkFiles(full, r, out);
+    else if (d.isFile()) { try { out.push([r, (await fsp.stat(full)).size]); } catch { /* gone */ } }
+  }
+  return out;
+}
+
+/**
+ * What the art takes on disk: installed files of this manifest (artBytes / artFiles / missing), download partials
+ * (`*.part`, partBytes), leftover files of older packs (leftoverBytes, plus every file under `extraDirs`, e.g.
+ * userData/art-migrate), and whether the installed state is this manifest's.
+ */
+export async function artStorage(manifest, artDir, { extraDirs = [] } = {}) {
+  const wanted = new Map((manifest ? manifest.entries : []).map((e) => [safeRel(e.p), e.s]));
+  const out = { tag: manifest ? manifest.tag : null, total: manifest ? manifest.bytes : 0, files: wanted.size, artBytes: 0, artFiles: 0, partBytes: 0, leftoverBytes: 0, leftoverFiles: 0 };
+  for (const [rel, size] of await walkFiles(artDir, '', [])) {
+    if (rel === STATE_FILE) continue;
+    if (rel.endsWith('.part')) out.partBytes += size;
+    else if (wanted.get(rel) === size) { out.artBytes += size; out.artFiles++; }
+    else { out.leftoverBytes += size; out.leftoverFiles++; }
+  }
+  for (const d of extraDirs) for (const [, size] of await walkFiles(d, '', [])) { out.leftoverBytes += size; out.leftoverFiles++; }
+  out.missing = out.files - out.artFiles;
+  const st = readState(artDir);
+  out.ready = !!(manifest && st && st.hash === manifest.hash && out.missing === 0);
+  return out;
+}
+
+/** Delete the download partials (`*.part`). @returns {Promise<number>} bytes freed */
+export async function clearPartials(artDir) {
+  let n = 0;
+  for (const [rel, size] of await walkFiles(artDir, '', [])) if (rel.endsWith('.part')) { await fsp.rm(path.join(artDir, rel), { force: true }); n += size; }
+  return n;
+}
+
+/** Delete files that are not part of this manifest (older packs, partials) and the `extraDirs`. */
+export async function removeLeftovers(manifest, artDir, { extraDirs = [] } = {}) {
+  await prune(artDir, new Set((manifest ? manifest.entries : []).map((e) => safeRel(e.p))));
+  for (const d of extraDirs) await fsp.rm(d, { recursive: true, force: true });
+}
+
+/**
+ * Re-check every installed file's sha256; bad ones are deleted and the installed state is dropped, so the next
+ * ensureArt() re-downloads exactly those (repair). @returns {Promise<{ checked: number, bad: string[] }>}
+ */
+export async function verifyArt(manifest, artDir, { onProgress = () => {} } = {}) {
+  const bad = [];
+  let checked = 0;
+  for (const e of manifest.entries) {
+    const f = path.join(artDir, safeRel(e.p));
+    const size = await statSize(f);
+    if (size >= 0 && (size !== e.s || (await sha256File(f)) !== e.h)) { bad.push(e.p); await fsp.rm(f, { force: true }); }
+    if (++checked % 200 === 0) onProgress({ phase: 'check', files: manifest.entries.length, filesDone: checked });
+  }
+  if (bad.length || (await artStorage(manifest, artDir)).missing) await fsp.rm(path.join(artDir, STATE_FILE), { force: true });
+  return { checked, bad };
+}

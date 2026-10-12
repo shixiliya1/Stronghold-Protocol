@@ -63,6 +63,7 @@ await fsp.writeFile(path.join(OUT, 'healthz'), JSON.stringify({ ok: true, app: G
 const CL = path.join(OUT, 'client');
 await copyDir(path.join(MOBILE, 'src', 'client'), CL);
 for (const f of ['servers.js', 'update-check.js']) await fsp.copyFile(path.join(ROOT, 'electron', f), path.join(CL, f));
+await fsp.copyFile(path.join(ROOT, 'electron', 'ui', 'storage-ui.js'), path.join(CL, 'storage-ui.js'));
 await fsp.copyFile(path.join(ROOT, 'electron', 'ui', 'chooser.css'), path.join(CL, 'chooser.css'));
 await fsp.writeFile(path.join(CL, 'chooser.js'), fs.readFileSync(path.join(ROOT, 'electron', 'ui', 'chooser.js'), 'utf8')
   .replace('`桌面版 ${s.app}', '`${s.appLabel || \'客户端\'} ${s.app}').replace("'正在启动本机服务器…'", "'正在进入…'"));
@@ -76,7 +77,7 @@ chooser = chooser
   .replace(/script-src 'self'/, "script-src 'self'; connect-src 'self' https: wss: ws: http:")
   .replace('<meta charset="utf-8" />', '<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />')
   .replace('<link rel="stylesheet" href="chooser.css" />', '<link rel="stylesheet" href="chooser.css" />\n<link rel="stylesheet" href="mobile.css" />\n<link rel="manifest" href="../manifest.json" />')
-  .replace('<script src="chooser.js"></script>', '<script src="config.js"></script>\n<script src="art-state.js"></script>\n<script src="cap-core.js"></script>\n<script src="art-ui.js"></script>\n<script src="web-api.js"></script>\n<script src="chooser.js"></script>');
+  .replace('<script src="chooser.js"></script>', '<script src="config.js"></script>\n<script src="art-state.js"></script>\n<script src="cap-core.js"></script>\n<script src="art-ui.js"></script>\n<script src="web-api.js"></script>\n<script src="storage.js"></script>\n<script src="chooser.js"></script>');
 await fsp.writeFile(path.join(CL, 'index.html'), chooser);
 const config = { platform: target, version: VERSION, game: GAME, protocol: PROTOCOL_VERSION, cloud: CLOUD, base: BASE,
   repo: 'shixiliya1/Stronghold-Protocol', offlineUrl: 'ws://offline.invalid/ws' };
