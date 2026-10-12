@@ -1238,5 +1238,12 @@
   "暂时没有可加入的房间，点「最快匹配」创建一个": "No joinable rooms right now — press \"Quick match\" to open one",
   "加入": "Join",
   "公开到联机大厅": "Listed in matchmaking",
-  "公开后，联机大厅的玩家可以在房间列表看到并加入（最快匹配也会匹配到）": "Listed rooms appear in the matchmaking room list and anyone can join (Quick match finds them too)"
+  "公开后，联机大厅的玩家可以在房间列表看到并加入（最快匹配也会匹配到）": "Listed rooms appear in the matchmaking room list and anyone can join (Quick match finds them too)",
+  "服务器的联机协议是 {server}，本客户端是 {client}：版本不兼容，请更新客户端（服务器版本 {app}）": "The server speaks protocol {server}, this client {client}: incompatible — please update the client (server version {app})",
+  "服务器的联机协议是 {server}，本客户端是 {client}：版本不兼容，请更新服务器（服务器版本 {app}）": "The server speaks protocol {server}, this client {client}: incompatible — please update the server (server version {app})",
+  "服务器资源清单无效（{bad}），已忽略": "The server's resource manifest is invalid ({bad}); ignored",
+  "服务器资源清单校验失败，已忽略": "The server's resource manifest failed verification; ignored",
+  "模组资源下载失败（HTTP {status}）": "Mod resource download failed (HTTP {status})",
+  "模组资源校验失败，已丢弃": "A mod resource failed verification and was discarded",
+  "已下载服务器模组资源 {n} 个文件（{mb} MB），重新进入后生效": "Downloaded {n} mod resource files ({mb} MB) from this server; they apply the next time you enter"
 }

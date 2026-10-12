@@ -42,6 +42,10 @@ public class ArtWebViewClient extends BridgeWebViewClient {
         String path = u.getPath();
         if (host != null && host.equals("localhost") && path != null) {
             if (path.equals("/client/art-state.js")) return artState();
+            if (path.startsWith("/assets/")) {
+                File over = CasStore.fileFor(ctx, path); // a server's mod overlay (CasStore)
+                if (over != null) { WebResourceResponse r = fileResponse(over, path); if (r != null) return r; }
+            }
             if (path.startsWith("/assets/") || path.equals("/data/local-assets.json")) {
                 WebResourceResponse r = artFile(path);
                 if (r != null) return r;
@@ -71,8 +75,13 @@ public class ArtWebViewClient extends BridgeWebViewClient {
         if (path.contains("..") || path.contains("/.")) return null;
         File f = new File(ArtStore.artDir(ctx), path.substring(1));
         if (!f.isFile()) return null;
+        return fileResponse(f, f.getName());
+    }
+
+    private WebResourceResponse fileResponse(File f, String mimeName) {
+        if (!f.isFile()) return null;
         try {
-            String name = f.getName();
+            String name = mimeName.substring(mimeName.lastIndexOf('/') + 1);
             int dot = name.lastIndexOf('.');
             String mime = dot >= 0 ? MIME.get(name.substring(dot + 1).toLowerCase()) : null;
             if (mime == null) mime = "application/octet-stream";

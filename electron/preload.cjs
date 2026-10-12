@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('spDesktop', {
   artSkip: () => ipcRenderer.invoke('desktop:art-skip'),
   storageInfo: () => ipcRenderer.invoke('desktop:storage-info'),
   storageAction: (id) => ipcRenderer.invoke('desktop:storage-action', id),
+  casList: () => ipcRenderer.invoke('desktop:cas-list'),
+  casPut: (h, bytes) => ipcRenderer.invoke('desktop:cas-put', h, bytes),
+  casActivate: (map) => ipcRenderer.invoke('desktop:cas-activate', map),
+  resUsage: (usage) => ipcRenderer.invoke('desktop:res-usage', usage),
   onArtProgress: (fn) => { ipcRenderer.on('art:progress', (_e, p) => fn(p)); },
 });
 

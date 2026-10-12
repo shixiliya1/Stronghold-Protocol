@@ -36,7 +36,8 @@ import { useErrorBoundary } from '../vendor/hooks.module.js';
 import { html, UiHosts, Button, MicroLabel, closeAllDialogs } from './ui/components.js';
 import { ConnectionBanner } from './ui/connBanner.js';
 import { ToastHost, toast, toastError, describeError } from './ui/toasts.js';
-import { net, identity, NetError } from './net.js';
+import { net, identity, NetError, defaultWsUrl } from './net.js';
+import { syncResources } from './resources.js';
 import { store, useStore, emptyMatch, selectRoute, sessionResetNotice, isSpectating } from './store.js';
 import { data } from './data.js';
 import { GAME_FILES } from './ui/gameComponents.js';
@@ -218,6 +219,11 @@ function wireNet() {
   });
   net.on('clock', (c) => store.set({ clock: { offset: c.offset, rtt: c.rtt, synced: c.synced } }));
   net.on('welcome', onWelcome);
+  // resource manifest (resources.js): mod overlays of this server into the shared content-addressed cache
+  net.on('welcome', (msg) => {
+    syncResources(msg, net.url || defaultWsUrl(), { notify: (text, level) => (level === 'error' ? toast(text, 'error', { ttl: 15000 }) : level === 'warn' ? toast(text, 'warn') : toast(text)) })
+      .catch((e) => console.warn('[resources]', e && e.message));
+  });
   net.on('helloError', (err) => {
     if (err.code === 'SESSION_IN_USE') identity.rejectToken();
     toastError(err);

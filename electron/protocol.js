@@ -14,7 +14,7 @@ const NULL_BODY = new Set([101, 204, 205, 304]);
 /**
  * Turn the server's (req, res) static handler into a fetch-style handler.
  * @param {(req: any, res: any, rawPath: string, query: string) => Promise<void>} serveStatic
- * @param {{ healthz?: () => object, log?: (msg: string) => void }} [opts]
+ * @param {{ healthz?: () => object, log?: (msg: string) => void, overlay?: (pathname: string) => string|null }} [opts]
  * @returns {(request: Request) => Promise<Response>}
  */
 export function createProtocolHandler(serveStatic, opts = {}) {
@@ -26,6 +26,16 @@ export function createProtocolHandler(serveStatic, opts = {}) {
     if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
     if (url.pathname === '/healthz') {
       return new Response(JSON.stringify(healthz()), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+    }
+    // a server's mod overlay (cas.js): the file of that hash instead of the installed art
+    const over = opts.overlay && url.pathname.startsWith('/assets/') ? opts.overlay(decodeURIComponent(url.pathname)) : null;
+    if (over) {
+      try {
+        const buf = await (await import('node:fs/promises')).readFile(over);
+        const ext = url.pathname.split('.').pop().toLowerCase();
+        const type = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg', mp3: 'audio/mpeg', ogg: 'audio/ogg', json: 'application/json', atlas: 'text/plain', skel: 'application/octet-stream' }[ext] || 'application/octet-stream';
+        return new Response(method === 'HEAD' ? null : buf, { status: 200, headers: { 'Content-Type': type, 'Content-Length': String(buf.length), 'Cache-Control': 'no-cache' } });
+      } catch { /* fall through to the installed art */ }
     }
     const headers = {};
     for (const [k, v] of request.headers) headers[k.toLowerCase()] = v;

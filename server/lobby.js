@@ -720,7 +720,10 @@ export class Lobby {
 
   /** Extra fields of every `welcome` (net.js): the operators a 自选 slot may field (shared/diy.js `kitted`). */
   welcomeInfo() {
-    return { diyKitted: KITTED_CHARS, features: [CHAT_FEATURE, HALL_FEATURE] };
+    const info = { diyKitted: KITTED_CHARS, features: [CHAT_FEATURE, HALL_FEATURE] };
+    // resource manifest (server/resources.js, set by index.js): { hash, url, protocol }
+    if (this.resourcesInfo) { try { info.resources = this.resourcesInfo(); } catch { /* the game works without it */ } }
+    return info;
   }
 
   /**

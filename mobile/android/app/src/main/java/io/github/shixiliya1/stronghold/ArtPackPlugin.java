@@ -1,5 +1,6 @@
 package io.github.shixiliya1.stronghold;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -108,7 +109,44 @@ public class ArtPackPlugin extends Plugin {
         o.put("size", fd.getTotalSpace());
         if (p != null) { o.put("tag", p.optString("tag")); o.put("total", p.optLong("bytes")); o.put("files", p.optInt("files")); o.put("zipSize", p.optLong("zipSize")); }
         o.put("installed", ArtStore.installedHash(getContext()));
+        long[] cas = treeSize(CasStore.dir(getContext()));
+        o.put("casBytes", cas[0]);
+        o.put("casFiles", cas[1]);
         call.resolve(o);
+    }
+
+    // ---- resource cache (CasStore; public/js/resources.js) ------------------------------------------------------
+
+    @PluginMethod
+    public void casList(PluginCall call) {
+        JSArray a = new JSArray();
+        File[] l = CasStore.dir(getContext()).listFiles();
+        if (l != null) for (File f : l) if (CasStore.isHash(f.getName())) a.put(f.getName());
+        call.resolve(new JSObject().put("hashes", a));
+    }
+
+    @PluginMethod
+    public void casPut(PluginCall call) {
+        try {
+            byte[] b = android.util.Base64.decode(call.getString("data", ""), android.util.Base64.DEFAULT);
+            CasStore.put(getContext(), call.getString("hash", ""), b);
+            call.resolve(new JSObject().put("bytes", b.length));
+        } catch (Exception e) { call.reject(String.valueOf(e.getMessage())); }
+    }
+
+    @PluginMethod
+    public void casActivate(PluginCall call) {
+        try {
+            JSObject m = call.getObject("map", new JSObject());
+            call.resolve(new JSObject().put("active", CasStore.activate(getContext(), m)));
+        } catch (Exception e) { call.reject(String.valueOf(e.getMessage())); }
+    }
+
+    @PluginMethod
+    public void casClear(PluginCall call) {
+        long n = treeSize(CasStore.dir(getContext()))[0];
+        CasStore.clear(getContext());
+        call.resolve(new JSObject().put("freed", n));
     }
 
     @PluginMethod

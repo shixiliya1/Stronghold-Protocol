@@ -11,7 +11,11 @@ const DIST = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace
 const exe = path.resolve(process.argv[2] || path.join(DIST, fs.readdirSync(DIST).find((n) => n.startsWith('stronghold-server-') && !n.endsWith('.sha256'))));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-bin-'));
 const port = 30000 + Math.floor(Math.random() * 20000);
-const child = spawn(exe, ['--port', String(port), '--host', '127.0.0.1', '--data-dir', path.join(dir, 'cache')], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+const mod = path.join(dir, 'mods', 'demo', 'files', 'assets', 'ui');
+fs.mkdirSync(mod, { recursive: true });
+fs.writeFileSync(path.join(dir, 'mods', 'demo', 'mod.json'), JSON.stringify({ name: 'Demo', version: '1' }));
+fs.writeFileSync(path.join(mod, 'x.png'), 'demo-bytes');
+const child = spawn(exe, ['--port', String(port), '--host', '127.0.0.1', '--data-dir', path.join(dir, 'cache'), '--mods-dir', path.join(dir, 'mods')], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
 let out = '';
 child.stdout.on('data', (d) => { out += d; });
 child.stderr.on('data', (d) => { out += d; });
@@ -24,10 +28,15 @@ try {
   ok(h.ok === true, '/healthz ok (app ' + h.app + ')');
   ok((await (await fetch(base + '/')).text()).includes('自定义服务器'), '/ = "use a client" page');
   ok((await fetch(base + '/assets/chars/x.png')).status === 404, 'no art served');
+  const rm = await (await fetch(base + '/resources.json')).json();
+  const f = rm.overlays?.[0]?.files?.['assets/ui/x.png'];
+  ok(rm.protocol === h.version && f && f.s === 10, 'resource manifest lists the mod (protocol ' + rm.protocol + ')');
+  ok((await (await fetch(`${base}/cas/${f.h}`)).text()) === 'demo-bytes', '/cas serves the mod file by hash');
   const url = `ws://127.0.0.1:${port}/ws`;
   const { client: a, welcome } = await connectAs(url, '晨曦守望');
   const { client: b } = await connectAs(url, '银灰骑士');
   ok(welcome.features?.includes('lobby') && welcome.features?.includes('chat'), 'welcome features lobby + chat');
+  ok(welcome.resources?.hash === rm.hash, 'welcome names the resource manifest');
   b.send({ t: 'lobby.sub', on: true, list: true });
   a.send({ t: 'room.create', mode: 'coop', difficulty: 'NORMAL' });
   const st = await a.waitFor('room.state', (m) => !!m.code, 3000);

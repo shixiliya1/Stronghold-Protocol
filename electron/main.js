@@ -20,6 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createProtocolHandler } from './protocol.js';
+import { createCas } from './cas.js';
 import { MODES, normalizeSettings, probeServer, toWsUrl } from './servers.js';
 import { createUpdater } from './updater.js';
 import { STATE_FILE, artReady, ensureArt, packUrls, artStorage, clearPartials, removeLeftovers, verifyArt } from './art.js';
@@ -52,6 +53,8 @@ const ART = (() => {
     return { manifest, dir: process.env.SP_ART_DIR || path.join(app.getPath('userData'), 'art'), migrate: path.join(app.getPath('userData'), 'art-migrate') };
   } catch (e) { console.error('[art] bad manifest', e.message); return null; }
 })();
+let casStore = null;
+const getCas = () => (casStore ||= createCas(path.join(app.getPath('userData'), 'cas')));
 let artProgress = null;
 let artRetry = null;
 let artSkip = null;
@@ -103,11 +106,23 @@ const diskFree = (dir) => {
   try { const s = fs.statfsSync(dir); return { free: s.bavail * s.bsize, size: s.blocks * s.bsize }; } catch { return null; }
 };
 /** 存储管理: rows + actions for ui/storage-ui.js. */
+/** 资源缓存 rows (cas.js + res-usage.json written by the game page): size, and which server uses which mod pack. */
+function resourceRows() {
+  const c = getCas().size();
+  let usage = {};
+  try { usage = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'res-usage.json'), 'utf8')) || {}; } catch { usage = {}; }
+  const rows = [{ id: 'cas', label: '服务器资源缓存（模组，按内容共享）', bytes: c.bytes, text: `${c.files} 个文件` }];
+  for (const [server, u] of Object.entries(usage).slice(0, 20)) {
+    const packs = (u.packs || []).map((p) => `${p.name || p.id}${p.version ? ' ' + p.version : ''}`).join('、');
+    rows.push({ id: `srv:${server}`, label: `  ${server}`, text: packs ? `模组：${packs}` : '只用基础美术' });
+  }
+  return rows;
+}
 async function storageInfo() {
   const userData = app.getPath('userData');
   const disk = diskFree(userData);
   if (!ART) {
-    return { title: '存储管理', rows: [{ id: 'art', label: '美术资源', text: '随程序附带（开发版），无需管理' }, ...(disk ? [{ id: 'free', label: '磁盘可用空间', bytes: disk.free, of: disk.size }] : [])], actions: [] };
+    return { title: '存储管理', rows: [{ id: 'art', label: '美术资源', text: '随程序附带（开发版），无需管理' }, ...resourceRows(), ...(disk ? [{ id: 'free', label: '磁盘可用空间', bytes: disk.free, of: disk.size }] : [])], actions: [{ id: 'clear-cas', label: '清除服务器资源缓存' }] };
   }
   const a = await artStorage(ART.manifest, ART.dir, { extraDirs: [ART.migrate] });
   return {
@@ -117,9 +132,11 @@ async function storageInfo() {
       { id: 'cache', label: '下载缓存（未完成的分段）', bytes: a.partBytes },
       { id: 'leftover', label: '旧版美术残留', bytes: a.leftoverBytes, text: a.leftoverFiles ? `${a.leftoverFiles} 个文件` : '无' },
       ...(disk ? [{ id: 'free', label: '磁盘可用空间', bytes: disk.free, of: disk.size }] : []),
+      ...resourceRows(),
       { id: 'path', label: '位置', text: ART.dir },
     ],
     actions: [
+      { id: 'clear-cas', label: '清除服务器资源缓存', confirm: '清除服务器模组资源缓存？再次进入这些服务器时会重新下载。' },
       { id: 'clear-cache', label: '清除下载缓存' },
       { id: 'remove-leftover', label: '删除旧版美术残留' },
       { id: 'verify', label: '校验并修复美术', note: '逐个检查 sha256，损坏的文件重新下载' },
@@ -129,6 +146,7 @@ async function storageInfo() {
   };
 }
 async function storageAction(id) {
+  if (id === 'clear-cas') { const n = getCas().clear(); return { ok: true, message: `已清除 ${(n / 1048576).toFixed(1)} MB 服务器资源缓存` }; }
   if (!ART) return { error: '开发版：美术随程序附带' };
   const m = ART.manifest;
   if (id === 'clear-cache') { const n = await clearPartials(ART.dir); return { ok: true, message: `已清除 ${(n / 1048576).toFixed(1)} MB 下载缓存` }; }
@@ -136,7 +154,7 @@ async function storageAction(id) {
   if (id === 'delete-art') { fs.rmSync(ART.dir, { recursive: true, force: true }); return { ok: true, message: '已删除全部美术资源，游戏将以无美术模式运行' }; }
   if (id === 'verify' || id === 'redownload') {
     let bad = null;
-    if (id === 'verify') bad = (await verifyArt(m, ART.dir)).bad;
+    if (id === 'verify') { bad = (await verifyArt(m, ART.dir)).bad; getCas().verify(); }
     else fs.rmSync(path.join(ART.dir, STATE_FILE), { force: true });
     setTimeout(async () => { const r = await prepareArt({ force: true }); showChooser(r === 'skipped' ? '美术资源下载已跳过，可在「存储管理」里继续' : ''); }, 50);
     return { ok: true, navigating: true, message: bad ? `校验完成：${bad.length} 个文件损坏，正在重新下载` : '正在下载美术资源…' };
@@ -331,6 +349,7 @@ if (!app.requestSingleInstanceLock()) {
     const handler = createProtocolHandler(serveStatic, {
       healthz: () => ({ ok: true, version: PROTOCOL_VERSION, app: APP_VERSION }),
       log: (m) => console.error(m),
+      overlay: (p) => getCas().fileFor(p),
     });
     protocol.handle(SCHEME, (request) => handler(request));
 
@@ -367,6 +386,15 @@ if (!app.requestSingleInstanceLock()) {
     });
     ipcMain.handle('desktop:art-state', () => artProgress);
     ipcMain.handle('desktop:art-retry', () => { const r = artRetry; artRetry = null; if (r) r(); });
+    // resource cache (cas.js; public/js/resources.js): list / put (sha256-verified) / activate a server's overlay
+    ipcMain.handle('desktop:cas-list', () => getCas().list());
+    ipcMain.handle('desktop:cas-put', (_e, h, bytes) => getCas().put(String(h), bytes));
+    ipcMain.handle('desktop:cas-activate', (_e, map) => getCas().activate(map));
+    ipcMain.handle('desktop:res-usage', (_e, usage) => {
+      if (!usage || typeof usage !== 'object') return false;
+      try { fs.writeFileSync(path.join(app.getPath('userData'), 'res-usage.json'), JSON.stringify(usage).slice(0, 1 << 20)); } catch { /* ignore */ }
+      return true;
+    });
     ipcMain.handle('desktop:art-skip', () => { if (artSkip) artSkip(); });
     ipcMain.handle('desktop:storage-info', () => storageInfo());
     ipcMain.handle('desktop:storage-action', (_e, id) => storageAction(String(id || '')));

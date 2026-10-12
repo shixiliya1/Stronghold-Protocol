@@ -8,6 +8,7 @@
 //   * everything else → the static files (static.js).
 // A route that throws is logged and answers 500.
 
+import fs from 'node:fs';
 import { PROTOCOL_VERSION, APP_VERSION } from '../../shared/constants.js';
 import { buildTag } from './buildTag.js';
 import { setSecurityHeaders, sendError, sendJson, splitUrl } from './common.js';
@@ -36,7 +37,7 @@ export function healthReport({ startedAt, network, registry, lobby }) {
  *           health: Parameters<typeof healthReport>[0], log: object }} deps
  * @returns {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void}
  */
-export function createRequestHandler({ serveStatic, health, log }) {
+export function createRequestHandler({ serveStatic, resources = null, health, log }) {
   async function handleRequest(req, res) {
     const url = req.url || '/';
     if (url.length > MAX_URL_LENGTH) { sendError(req, res, 414, '请求地址过长 · URI too long'); return; }
@@ -49,6 +50,22 @@ export function createRequestHandler({ serveStatic, health, log }) {
     }
     if (parts.rawPath === '/healthz') {
       sendJson(req, res, 200, healthReport(health));
+      return;
+    }
+    // resource manifest + content-addressed files (server/resources.js): readable from any client origin
+    if (resources && parts.rawPath === '/resources.json') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'no-cache');
+      sendJson(req, res, 200, resources.manifest());
+      return;
+    }
+    if (resources && parts.rawPath.startsWith('/cas/')) {
+      const abs = resources.file(parts.rawPath.slice(5));
+      if (!abs) { sendError(req, res, 404, '找不到文件 · Not found'); return; }
+      let buf;
+      try { buf = await fs.promises.readFile(abs); } catch { sendError(req, res, 404, '找不到文件 · Not found'); return; }
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=31536000, immutable', 'Access-Control-Allow-Origin': '*' });
+      res.end(req.method === 'HEAD' ? undefined : buf);
       return;
     }
     await serveStatic(req, res, parts.rawPath, parts.query);

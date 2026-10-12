@@ -8,9 +8,10 @@ import { APP_VERSION } from '../../shared/constants.js';
 
 const HELP = `stronghold-server ${APP_VERSION} — 卫戍协议：盟约 headless game server (no art; play with the desktop / Android / web client)
 
-usage: stronghold-server [--port 3000] [--host ::] [--data-dir <dir>]
+usage: stronghold-server [--port 3000] [--host ::] [--mods-dir ./mods] [--data-dir <dir>]
   --port <n>      port to listen on (default 3000, or PORT)
   --host <addr>   bind address (default :: = all IPv6+IPv4; 0.0.0.0 = IPv4 only; 127.0.0.1 = this machine only)
+  --mods-dir <d>  mod overlay packs (<d>/<id>/mod.json + files/assets/…), default ./mods; clients download them by hash
   --data-dir <d>  where the embedded game data is unpacked (default: the user cache dir)
   --version, --help
 Ctrl+C stops the server.`;
@@ -23,6 +24,7 @@ function args(argv) {
     const val = () => { const v = inline ?? argv[++i]; if (v == null) { console.error(`${k}: missing value`); process.exit(2); } return v; };
     if (k === '--port' || k === '-p') o.port = Number(val());
     else if (k === '--host') o.host = val();
+    else if (k === '--mods-dir') o.mods = val();
     else if (k === '--data-dir') i += inline == null ? 1 : 0; // main.cjs reads it
     else if (k === '--version' || k === '-v') o.version = true;
     else if (k === '--help' || k === '-h' || k === '/?') o.help = true;
@@ -67,6 +69,7 @@ export async function main() {
       port: o.port, host: o.host,
       publicDir: path.join(root, 'public'), dataDir: path.join(root, 'data'), sharedDir: path.join(root, 'shared'),
       packsDir: path.join(root, 'packs'),
+      modsDir: path.resolve(o.mods || 'mods'),
     });
   } catch (e) {
     if (e && e.code === 'EADDRINUSE') console.error(`\n端口已被占用 / port ${o.port ?? process.env.PORT ?? 3000} is in use — try --port 3001`);

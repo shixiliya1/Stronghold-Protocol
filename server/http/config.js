@@ -63,6 +63,8 @@ export function serveDirs(opts) {
     packsDir: opts.packsDir || path.join(ROOT, 'packs'),
     // a separate art directory (static.js artDir): the desktop app's installed art pack; env SP_ART_DIR
     artDir: opts.artDir || process.env.SP_ART_DIR || null,
+    // mod overlay packs (server/resources.js): mods/<id>/mod.json + files/assets/…; env SP_MODS_DIR
+    modsDir: opts.modsDir || process.env.SP_MODS_DIR || path.join(ROOT, 'mods'),
   };
 }
 

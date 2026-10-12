@@ -123,7 +123,9 @@ await build({
 // index.html: the boot script runs first (mode → server, offline socket, Pages service worker)
 const idxPath = path.join(OUT, 'index.html');
 let idx = fs.readFileSync(idxPath, 'utf8');
-idx = idx.replace('<meta charset="utf-8" />', '<meta charset="utf-8" />\n  <script src="client/config.js"></script>\n  <script src="client/art-state.js"></script>\n  <script src="client/boot.js"></script>');
+idx = idx.replace('<meta charset="utf-8" />', '<meta charset="utf-8" />\n  <script src="client/config.js"></script>\n  <script src="client/art-state.js"></script>\n  <script src="client/boot.js"></script>'
+  // Android: @capacitor/core on the game page too (the ArtPack plugin's resource cache: public/js/resources.js)
+  + (target === 'android' ? '\n  <script src="client/cap-core.js"></script>' : ''));
 if (target === 'pages') {
   // The page keeps its root-relative URLs (/js/…, /sim/…, ../../shared/ clamping at the root): the service worker
   // answers every same-origin /x outside BASE with BASE/x under the *requested* URL, so module identity is unchanged.

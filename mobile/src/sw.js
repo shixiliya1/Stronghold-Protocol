@@ -23,6 +23,23 @@ self.addEventListener('activate', (e) => {
 
 const isArt = (p) => /^(assets|fonts|icons)\//.test(p) || /\.(png|webp|jpe?g|mp3|m4a|ogg|atlas|skel|glb|gltf|woff2?|ttf)$/i.test(p);
 
+// mod overlay of the server the page joined (public/js/resources.js): rel → sha256 out of the shared content-addressed
+// cache 'sp-cas-v1' (keys https://cas.invalid/<sha256>); kept in that cache too, so a restarted worker still has it.
+const CAS = 'sp-cas-v1';
+const MAP_KEY = 'https://cas.invalid/overlay-map';
+let overlay = null;
+async function overlayMap() {
+  if (overlay) return overlay;
+  try { const r = await caches.match(MAP_KEY, { cacheName: CAS }); overlay = r ? await r.json() : {}; } catch { overlay = {}; }
+  return overlay;
+}
+self.addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.t !== 'sp-overlay' || !d.map || typeof d.map !== 'object') return;
+  overlay = d.map;
+  e.waitUntil(caches.open(CAS).then((c) => c.put(MAP_KEY, new Response(JSON.stringify(overlay), { headers: { 'Content-Type': 'application/json' } }))).catch(() => {}));
+});
+
 async function put(cacheName, req, res) {
   try { const c = await caches.open(cacheName); await c.put(req, res); } catch (err) {
     if (cacheName === ART) { try { await caches.delete(ART); } catch { /* ignore */ } }
@@ -44,6 +61,15 @@ self.addEventListener('fetch', (e) => {
   e.respondWith((async () => {
     const key = new Request(new URL(BASE + rel, self.location.origin).href);
     const wrap = async (res) => (remap && res ? new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers: res.headers }) : res);
+    if (rel.startsWith('assets/')) {
+      const h = (await overlayMap())[rel];
+      const o = h ? await caches.match(`https://cas.invalid/${h}`, { cacheName: CAS }) : null;
+      if (o) {
+        const ext = rel.split('.').pop().toLowerCase();
+        const type = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg', jpeg: 'image/jpeg', mp3: 'audio/mpeg', ogg: 'audio/ogg', json: 'application/json' }[ext] || 'application/octet-stream';
+        return new Response(await o.blob(), { status: 200, headers: { 'Content-Type': type } });
+      }
+    }
     if (isArt(rel)) {
       const hit = await caches.match(key, { ignoreSearch: true });
       if (hit) return wrap(hit);
