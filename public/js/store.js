@@ -82,6 +82,9 @@ export const initialState = Object.freeze({
   match: emptyMatch(),
   ticker: [],
   emotes: [],
+  // room text chat (ui/chat.js): recent room.chat lines; features: what the server supports (welcome.features)
+  chat: [],
+  features: {},
   clock: { offset: 0, rtt: null, synced: false },
   ui: { pendingJoin: null, restoring: false, buildStale: false },
 });

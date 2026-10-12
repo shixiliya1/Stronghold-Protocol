@@ -56,11 +56,13 @@ import { startBuildGuard } from './ui/buildGuard.js';
 import { initLang, useLang, tickerText } from './ui/lang.js';
 import { t, N_, translateWire } from '../../shared/i18n.js';
 import { recordError } from './diag.js';
+import { serverHasChat } from '../../shared/chat.js';
 
 const RESTORE_GRACE_MS = 1500;
 const JOIN_DELAY_MS = 350;
 const TICKER_KEEP = 20;
 const EMOTE_KEEP = 20;
+const CHAT_KEEP = 60; // room.chat lines kept (ui/chat.js)
 
 const SCREENS = { title: TitleScreen, lobby: LobbyScreen, room: RoomScreen, game: GameScreen };
 
@@ -140,7 +142,7 @@ function backToLobby() {
   clearTimeout(restoreTimer);
   const s = store.get();
   if (s.room || s.match.public) closeAllDialogs();
-  store.set({ room: null, match: emptyMatch(), ticker: [], emotes: [] });
+  store.set({ room: null, match: emptyMatch(), ticker: [], emotes: [], chat: [] });
   store.patch('ui', { restoring: false });
 }
 
@@ -151,7 +153,7 @@ function onWelcome(msg) {
   const prevId = prev.me.playerId;
   const name = typeof msg.name === 'string' && msg.name ? msg.name : prev.me.name;
   identity.saveName(name);
-  store.set({ me: { playerId: msg.playerId ?? null, name, token: typeof msg.token === 'string' ? msg.token : null } });
+  store.set({ me: { playerId: msg.playerId ?? null, name, token: typeof msg.token === 'string' ? msg.token : null }, features: { chat: serverHasChat(msg) } });
   welcomeAt = Date.now();
 
   if (prevId != null && prevId !== msg.playerId) {
@@ -252,6 +254,12 @@ function wireNet() {
     // its broadcast priority: the strip plays the highest first (ui/ticker.js enqueueTickerLines)
     const priority = Number.isFinite(msg.priority) ? msg.priority : 0;
     store.set((s) => ({ ticker: [...s.ticker.slice(-(TICKER_KEEP - 1)), { id: ++seq, text, at: Date.now(), type, playerId, round: s.match?.public?.round ?? null, priority }] }));
+  });
+  net.on('room.chat', (msg) => {
+    if (typeof msg.text !== 'string' || !msg.text) return;
+    const line = { seq: ++seq, playerId: typeof msg.playerId === 'string' ? msg.playerId : null, name: typeof msg.name === 'string' ? msg.name.slice(0, 40) : '',
+      text: msg.text.slice(0, 400), spectator: !!msg.spectator, at: Date.now() };
+    store.set((s) => ({ chat: [...s.chat.slice(-(CHAT_KEEP - 1)), line] }));
   });
   net.on('m.emote', (msg) => {
     store.set((s) => ({ emotes: [...s.emotes.slice(-(EMOTE_KEEP - 1)), { seq: ++seq, playerId: msg.playerId, id: msg.id, at: Date.now() }] }));

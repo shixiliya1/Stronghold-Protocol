@@ -105,6 +105,7 @@ import { encode, isDroppable, isErrCode, sendRaw, sendSession } from './net.js';
 import { getData as defaultGetData, lookup } from './data.js';
 import { Match as DefaultMatch } from './match/Match.js';
 import { KITTED_CHARS } from './sim/content/kits/index.js';
+import { cleanChat, chatAllowed, CHAT_FEATURE } from '../shared/chat.js';
 
 /** Room code alphabet: uppercase letters without I and O (and no digits, so no 0/1). */
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -350,6 +351,7 @@ export class Lobby {
       case 'room.diy': return this.diy(session, msg);
       case 'room.spectate': return this.spectate(session, msg);
       case 'room.removeSpectator': return this.removeSpectator(session, msg);
+      case 'room.chat': return this.chat(session, msg);
       default:
         if (typeof msg.t === 'string' && msg.t.startsWith('g.')) return this.routeGame(session, msg);
         return fail(ERR.BAD_MSG, `unhandled type ${String(msg.t).slice(0, 32)}`);
@@ -705,7 +707,32 @@ export class Lobby {
 
   /** Extra fields of every `welcome` (net.js): the operators a 自选 slot may field (shared/diy.js `kitted`). */
   welcomeInfo() {
-    return { diyKitted: KITTED_CHARS };
+    return { diyKitted: KITTED_CHARS, features: [CHAT_FEATURE] };
+  }
+
+  /**
+   * room.chat { text } (shared/chat.js): a member of a room (seat or spectator, lobby or match) sends a line of text;
+   * it is cleaned (control characters, length, profanity) and relayed to every connected member as plain text.
+   * Rate limit per player: CHAT_RATE (→ RATE). @param {import('./net.js').Session} session @param {{ text: string }} msg
+   */
+  chat(session, msg) {
+    const room = this.roomOf(session);
+    if (!room) return fail(ERR.NOT_IN_ROOM);
+    const seat = room.seatOf(session.playerId);
+    const spectator = !seat && !!room.spectatorOf(session.playerId);
+    if ((!seat || seat.left) && !spectator) return fail(ERR.NOT_IN_ROOM);
+    const text = cleanChat(msg.text);
+    if (!text) return fail(ERR.BAD_MSG, 'empty chat message');
+    if (!this.chatTimes) this.chatTimes = new Map();
+    let times = this.chatTimes.get(session.playerId);
+    if (!times) { times = []; this.chatTimes.set(session.playerId, times); }
+    const now = Date.now();
+    if (!chatAllowed(times, now)) return fail(ERR.RATE, 'chat rate limit');
+    if (this.chatTimes.size > 5000) for (const [k, v] of this.chatTimes) if (!v.length || now - v[v.length - 1] > 60_000) this.chatTimes.delete(k);
+    const out = { t: 'room.chat', playerId: session.playerId, name: session.name, text, at: now };
+    if (spectator) out.spectator = true;
+    this.broadcastRoom(room, out);
+    return OK;
   }
 
   // ---------------------------------------------------------------------------------------------------
