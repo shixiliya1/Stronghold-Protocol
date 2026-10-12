@@ -22,7 +22,7 @@ import { GuideButton } from '../ui/guide.js';
 import { openStats } from './stats.js';
 import { SettingsButton } from '../ui/settings.js';
 import { LoadoutButton } from './loadout.js';
-import { net } from '../net.js';
+import { net, remoteServerUrl } from '../net.js';
 import { store, useStore, shallowEqual, emptyMatch, isSpectating } from '../store.js';
 import { difficultyInfo } from './lobby.js';
 import { t, tc } from '../../../shared/i18n.js';
@@ -84,9 +84,17 @@ export function aiLastOption(room, myId) {
   return { on: room.aiPicksLast === true, editable: room.hostId != null && room.hostId === myId };
 }
 
-/** Invite link for a room code (current page URL with ?room=CODE). */
+/**
+ * Invite link for a room code: the current page URL with ?room=CODE — or, when the page plays on a remote game server
+ * (?server=, the desktop / cloud client), that server's own web page, the one address a friend can open.
+ */
 export function inviteLink(code) {
   const loc = globalThis.location;
+  const remote = loc ? remoteServerUrl(loc) : null;
+  if (remote) {
+    const u = new URL(remote);
+    return `${u.protocol === 'wss:' ? 'https:' : 'http:'}//${u.host}/?room=${encodeURIComponent(code)}`;
+  }
   const base = loc ? `${loc.origin}${loc.pathname}` : '';
   return `${base}?room=${encodeURIComponent(code)}`;
 }

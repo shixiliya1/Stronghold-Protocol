@@ -1,5 +1,6 @@
-# Windows cloud-client package: local art/UI (node.exe + assets bundled), game sync to a remote server
-# (scripts/make-windows-bundle.mjs --cloud, public/js/net.js ?server=). Built on Linux; the bundle is Windows-only.
+# Windows desktop client (electron/): 卫戍协议.exe opens the game in its own window — every file from this computer
+# (app://game/, served in-process, no local HTTP server), game sync with the remote server over WebSocket.
+# Optionally also the older portable bundle (scripts/make-windows-bundle.mjs --cloud). Built on Linux for Windows x64.
 name: Windows client release
 
 on:
@@ -12,9 +13,13 @@ on:
         required: true
         default: v0.2.4-cloud.1
       server:
-        description: Game server WebSocket URL for 联机-云服务器.bat
+        description: Default game server (WebSocket URL)
         required: true
         default: wss://stronghold-xili.japaneast.cloudapp.azure.com/ws
+      portable:
+        description: Also attach the portable node.exe bundle (+~476 MB)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -26,10 +31,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
       SERVER_URL: ${{ github.event.inputs.server || 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws' }}
+      PORTABLE: ${{ github.event.inputs.portable || 'false' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +43,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            electron/package-lock.json
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -44,15 +53,42 @@ jobs:
       - name: Download game art (~550 MB)
         run: node tools/setup.mjs -y --no-local
 
-      - name: Build the Windows bundle
+      - name: Set the default game server
         run: |
-          node scripts/make-windows-bundle.mjs \
-            --out "$RUNNER_TEMP/out/Stronghold-Protocol-Windows" \
-            --cloud "$SERVER_URL"
+          sed -i "s#^const DEFAULT_SERVER = .*#const DEFAULT_SERVER = '${SERVER_URL}';#" electron/main.js
+          grep -n "^const DEFAULT_SERVER" electron/main.js
 
-      - name: Zip (UTF-8 file names)
-        id: zip
+      - name: Build the desktop app (Windows x64)
+        working-directory: electron
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
         run: |
+          npm ci --no-audit --no-fund
+          npx electron-builder --win dir --x64 --publish never
+
+      - name: Zip the desktop app (UTF-8 file names)
+        id: desktop
+        run: |
+          ZIP="$RUNNER_TEMP/Stronghold-Protocol-Desktop-$TAG-win-x64.zip"
+          python3 - electron/dist/win-unpacked "$ZIP" <<'PY'
+          import os, sys, zipfile
+          src, out = sys.argv[1], sys.argv[2]
+          top = '卫戍协议'
+          with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+              for d, _, files in os.walk(src):
+                  for f in sorted(files):
+                      p = os.path.join(d, f)
+                      z.write(p, top + '/' + os.path.relpath(p, src).replace(os.sep, '/'))
+          PY
+          sha256sum "$ZIP" | tee "$ZIP.sha256"
+          ls -l "$ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Build the portable bundle (optional)
+        id: portable
+        if: env.PORTABLE == 'true'
+        run: |
+          node scripts/make-windows-bundle.mjs --out "$RUNNER_TEMP/out/Stronghold-Protocol-Windows" --cloud "$SERVER_URL"
           ZIP="$RUNNER_TEMP/Stronghold-Protocol-Windows-client-$TAG.zip"
           cd "$RUNNER_TEMP/out"
           python3 - "$ZIP" <<'PY'
@@ -65,8 +101,21 @@ jobs:
                       z.write(p, p.replace(os.sep, '/'))
           PY
           sha256sum "$ZIP" | tee "$ZIP.sha256"
-          ls -l "$ZIP"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: List the release files
+        id: files
+        env:
+          DESKTOP_ZIP: ${{ steps.desktop.outputs.zip }}
+          PORTABLE_ZIP: ${{ steps.portable.outputs.zip }}
+        run: |
+          {
+            echo "list<<EOF"
+            for z in "$DESKTOP_ZIP" "$PORTABLE_ZIP"; do
+              if [ -n "$z" ]; then printf '%s\n%s\n' "$z" "$z.sha256"; fi
+            done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
@@ -75,10 +124,8 @@ jobs:
           name: Windows client ${{ env.TAG }}
           target_commitish: ${{ github.sha }}
           body: |
-            Windows 云联机客户端（非官方同人，严禁盈利，素材版权归原权利人，见 NOTICE.md）。
-            解压后双击「联机-云服务器.bat」：素材从本机读取，连接云服务器进行联机。
-            双击「启动游戏.bat」：本机开服（离线单人 / 局域网）。
-          files: |
-            ${{ steps.zip.outputs.zip }}
-            ${{ steps.zip.outputs.zip }}.sha256
+            卫戍协议：盟约 Windows 桌面客户端（非官方同人，严禁盈利；游戏素材版权归原权利人，见 NOTICE.md）。
+            解压后双击「卫戍协议.exe」：独立窗口，画面与素材都从本机读取，对局同步连 ${{ env.SERVER_URL }}。
+            未签名程序：Windows SmartScreen 提示时点「更多信息 → 仍要运行」。
+          files: ${{ steps.files.outputs.list }}
           fail_on_unmatched_files: true

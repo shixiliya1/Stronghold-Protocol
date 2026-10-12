@@ -39,3 +39,26 @@ test('--cloud: URL normalisation, the .bat and the README section', () => {
   assert.ok(/^[\x00-\x7f]*$/.test(b), 'the .bat stays ASCII');
   assert.match(cloudReadme('wss://example.com/ws'), /联机-云服务器\.bat/);
 });
+
+test('invite link: the remote server\'s web page when playing on one', async () => withStorage(async () => {
+  const { inviteLink } = await import('../public/js/screens/room.js');
+  const prev = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  const set = (v) => Object.defineProperty(globalThis, 'location', { configurable: true, value: v });
+  try {
+    set({ protocol: 'app:', host: 'game', origin: 'app://game', pathname: '/', search: '?server=wss%3A%2F%2Fexample.com%2Fws' });
+    assert.equal(inviteLink('ABCD'), 'https://example.com/?room=ABCD');
+    set({ protocol: 'http:', host: 'localhost:3000', origin: 'http://localhost:3000', pathname: '/', search: '?server=local' });
+    assert.equal(inviteLink('ABCD'), 'http://localhost:3000/?room=ABCD');
+  } finally {
+    if (prev) Object.defineProperty(globalThis, 'location', prev); else delete globalThis.location;
+  }
+}));
+
+test('PIXI root path: set on non-http(s) pages only', async () => {
+  const { fixRootPath } = await import('../public/js/render/app/pixi.js');
+  const P = () => ({ Assets: { resolver: { rootPath: '' } } });
+  const a = P(); fixRootPath(a, { protocol: 'app:', origin: 'app://game' });
+  assert.equal(a.Assets.resolver.rootPath, 'app://game/');
+  const b = P(); fixRootPath(b, { protocol: 'https:', origin: 'https://example.com' });
+  assert.equal(b.Assets.resolver.rootPath, '');
+});

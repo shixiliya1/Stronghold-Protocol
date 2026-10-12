@@ -1,0 +1,83 @@
+{
+  "name": "stronghold-protocol-desktop",
+  "productName": "卫戍协议",
+  "version": "0.2.4",
+  "private": true,
+  "description": "卫戍协议：盟约 desktop client (unofficial fan remake; local art, remote game server)",
+  "license": "GPL-3.0-or-later",
+  "author": "Stronghold Protocol contributors",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win zip --x64 --publish never",
+    "dir:win": "electron-builder --win dir --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "io.github.stronghold-protocol.desktop",
+    "productName": "卫戍协议",
+    "executableName": "卫戍协议",
+    "artifactName": "Stronghold-Protocol-Desktop-${version}-win-x64.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "protocol.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../public",
+        "to": "game/public",
+        "filter": [
+          "**/*",
+          "!dev/**"
+        ]
+      },
+      {
+        "from": "../data",
+        "to": "game/data"
+      },
+      {
+        "from": "../shared",
+        "to": "game/shared"
+      },
+      {
+        "from": "../server",
+        "to": "game/server"
+      },
+      {
+        "from": "../packs",
+        "to": "game/packs"
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE-Stronghold-Protocol.txt"
+      },
+      {
+        "from": "../NOTICE.md",
+        "to": "NOTICE.md"
+      },
+      {
+        "from": "../THIRD-PARTY-NOTICES.md",
+        "to": "THIRD-PARTY-NOTICES.md"
+      }
+    ],
+    "win": {
+      "icon": "../public/icons/app-512.png",
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  }
+}

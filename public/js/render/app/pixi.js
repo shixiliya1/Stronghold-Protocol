@@ -15,6 +15,19 @@ function loadScript(src) {
   });
 }
 
+/**
+ * PIXI's path utils only treat http(s): as URLs, so on any other scheme (the desktop client's app://game/) a root-relative
+ * asset path resolves against the bare scheme (`/assets/x.skel` → `app://assets/x.skel`). Give the resolver the page's
+ * origin as its root there; http(s) pages keep PIXI's own resolution.
+ * @param {any} PIXI
+ * @param {{ protocol?: string, origin?: string }} [loc]
+ */
+export function fixRootPath(PIXI, loc) {
+  if (!loc || /^https?:$/.test(loc.protocol || '') || !loc.origin || loc.origin === 'null') return;
+  const resolver = PIXI && PIXI.Assets && PIXI.Assets.resolver;
+  if (resolver && !resolver.rootPath) resolver.rootPath = `${loc.origin}/`;
+}
+
 /** Make sure PIXI and PIXI.spine exist (classic scripts; loaded once). */
 export function ensurePixi() {
   if (globalThis.PIXI && globalThis.PIXI.spine) return Promise.resolve(globalThis.PIXI);
@@ -23,6 +36,7 @@ export function ensurePixi() {
       if (!globalThis.PIXI) await loadScript(VENDOR.pixi);
       if (!globalThis.PIXI?.spine) await loadScript(VENDOR.spine);
       if (!globalThis.PIXI || !globalThis.PIXI.spine) throw new Error('PIXI / pixi-spine unavailable');
+      fixRootPath(globalThis.PIXI, globalThis.location);
       return globalThis.PIXI;
     })();
     pixiPromise.catch(() => { pixiPromise = null; });
