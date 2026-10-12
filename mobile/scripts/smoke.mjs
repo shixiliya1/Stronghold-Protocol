@@ -31,7 +31,7 @@ const srv = http.createServer((req, res) => {
   });
 });
 await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-const origin = `http://127.0.0.1:${srv.address().port}`;
+const origin = arg('origin', `http://127.0.0.1:${srv.address().port}`); // --origin https://x.github.io: test a deployed site
 process.env.CHROME_PATH ||= '/usr/bin/google-chrome';
 const c = new Client(puppeteer, origin, tag, { w: 915, h: 412 });
 let ok = false;
