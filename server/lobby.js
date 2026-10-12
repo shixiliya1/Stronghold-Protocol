@@ -220,7 +220,7 @@ export class Room {
   spectatorOf(playerId) { return this.spectators.find((s) => s.playerId === playerId) || null; }
 
   /** Lowest free seat index, or -1. */
-  freeSeat() { return this.seats.indexOf(null); }
+  freeSeat() { const i = this.seats.indexOf(null); return i >= 0 && i < this.size ? i : -1; } // a sized room (联机大厅) uses its first `size` seats
 
   /** Humans that have not departed, in seat order. @returns {Seat[]} */
   activeHumans() { return this.seats.filter((s) => s && !s.isBot && !s.left); }

@@ -29,13 +29,16 @@ import { difficultyInfo } from './lobby.js';
 import { t, tc } from '../../../shared/i18n.js';
 
 /**
- * Seats padded to the room's capacity (co-op 4, solo 1), each null or a seat record.
+ * Seats padded to the room's capacity (co-op: its size, MAX_SEATS unless a 联机大厅 room says less; solo 1), each null or
+ * a seat record (an occupied seat beyond the size still shows).
  * @param {any} room room.state payload
  * @returns {(null | {seat:number, playerId:any, name:string, isBot:boolean, ready:boolean, connected:boolean})[]}
  */
 export function normalizeSeats(room) {
-  const cap = room?.mode === 'solo' ? 1 : MAX_SEATS;
   const src = Array.isArray(room?.seats) ? room.seats : [];
+  const size = Number.isInteger(room?.size) && room.size >= 1 && room.size <= MAX_SEATS ? room.size : MAX_SEATS;
+  let cap = room?.mode === 'solo' ? 1 : size;
+  for (let i = cap; i < Math.min(src.length, MAX_SEATS); i++) if (src[i]) cap = i + 1;
   const out = [];
   for (let i = 0; i < cap; i++) {
     const s = src[i];

@@ -1110,6 +1110,8 @@ describe('screen helpers', () => {
       ],
     };
     assert.equal(normalizeSeats(room).length, 4);
+    assert.equal(normalizeSeats({ ...room, size: 2, seats: room.seats.slice(0, 2) }).length, 2, 'a 2-player room shows 2 seat cards');
+    assert.equal(normalizeSeats({ mode: 'coop', size: 2, seats: [null, null, null, { playerId: 'x', name: 'x' }] }).length, 4, 'an occupied seat beyond the size still shows');
     assert.equal(normalizeSeats({ mode: 'solo', seats: [room.seats[0], null, null, null] }).length, 1);
     assert.deepEqual(normalizeSeats({ mode: 'coop', seats: 'bad' }), [null, null, null, null]);
     let f = roomFacts(room, 'h');

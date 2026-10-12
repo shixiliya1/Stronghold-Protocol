@@ -86,6 +86,8 @@ describe('联机大厅 (server)', () => {
     const e = await player('戊');
     const r = await e.request({ t: 'room.join', code: sb.code });
     assert.equal(r.code, ERR.ROOM_FULL);
+    // the size also caps AI teammates (its first `size` seats only)
+    assert.equal((await b.request({ t: 'room.addBot' })).code, ERR.ROOM_FULL);
     // unsubscribed / never-subscribed clients
     await new Promise((res) => setTimeout(res, 2300));
     assert.ok(!old.log.some((m) => String(m.t).startsWith('lobby.')), 'no lobby.* to a client that never subscribed');
