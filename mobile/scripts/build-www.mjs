@@ -27,19 +27,19 @@ const ART_PACK = arg('art-pack', null);
 const VERSION = arg('version', JSON.parse(fs.readFileSync(path.join(MOBILE, 'package.json'), 'utf8')).version);
 const { PROTOCOL_VERSION } = await import(pathToFileURL(path.join(ROOT, 'shared', 'constants.js')).href);
 
-async function copyDir(src, dst, filter = () => true) {
+async function copyDir(src, dst, filter = () => true, skipDir = () => false) {
   await fsp.mkdir(dst, { recursive: true });
   for (const e of await fsp.readdir(src, { withFileTypes: true })) {
     if (e.name.startsWith('.')) continue;
     const s = path.join(src, e.name), d = path.join(dst, e.name);
-    if (e.isDirectory()) await copyDir(s, d, filter);
+    if (e.isDirectory()) { if (!skipDir(s)) await copyDir(s, d, filter, skipDir); }
     else if (e.isFile() && filter(s)) await fsp.copyFile(s, d);
   }
 }
 
 await fsp.rm(OUT, { recursive: true, force: true });
 const ART_DIR = `${path.sep}public${path.sep}assets${path.sep}`;
-await copyDir(path.join(ROOT, 'public'), OUT, (f) => !f.includes(`${path.sep}dev${path.sep}`) && !(ART_PACK && f.includes(ART_DIR)));
+await copyDir(path.join(ROOT, 'public'), OUT, (f) => !f.includes(`${path.sep}dev${path.sep}`) && !(ART_PACK && f.includes(ART_DIR)), (d) => !!ART_PACK && d === path.join(ROOT, 'public', 'assets'));
 await copyDir(path.join(ROOT, 'data'), path.join(OUT, 'data'), (f) => !(ART_PACK && path.basename(f) === 'local-assets.json'));
 await copyDir(path.join(ROOT, 'shared'), path.join(OUT, 'shared'));
 await copyDir(path.join(ROOT, 'server', 'sim'), path.join(OUT, 'sim'), (f) => f.endsWith('.js') && path.basename(f).toLowerCase() !== 'nodedata.js');

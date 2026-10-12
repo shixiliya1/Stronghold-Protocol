@@ -104,7 +104,7 @@ jobs:
         working-directory: mobile
         run: |
           node scripts/build-www.mjs --target android --version "$VERSION" --cloud "$SERVER_URL" --art-pack "$RUNNER_TEMP/art/art-pack.json"
-          if [ -d www/assets ]; then echo "::error::art bundled in the APK"; exit 1; fi
+          if [ -n "$(find www/assets -type f 2>/dev/null | head -1)" ]; then echo "::error::art bundled in the APK"; exit 1; fi
           du -sh www
           npx cap sync android
 
