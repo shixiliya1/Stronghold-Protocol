@@ -1,0 +1,43 @@
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 25%,#1c2b26,#0b0f0e 70%);color:#d8e3de;font:14px/1.55 "Noto Sans SC","Microsoft YaHei",system-ui,sans-serif}
+main{width:min(980px,94vw);padding:20px 0}
+header{text-align:center;margin-bottom:18px}
+.kicker{letter-spacing:.3em;font-size:12px;color:#7fa596}
+h1{margin:4px 0;font-size:40px;letter-spacing:.08em}
+h1 em{font-style:normal;color:#4ed8af}
+h2{margin:0;font-size:16px}
+.sub{margin:0;color:#9db5ab}
+kbd{border:1px solid #3a4d46;border-radius:4px;padding:0 5px;font-size:12px}
+code{color:#4ed8af}
+.presets{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.card{display:flex;flex-direction:column;gap:6px;text-align:left;background:rgba(18,26,23,.92);border:1px solid #2c3a35;color:inherit;padding:16px 18px;font:inherit;cursor:pointer;border-radius:4px}
+.card:hover,.card:focus-visible{border-color:#4ed8af;outline:none}
+.card.last,.srv.last{box-shadow:inset 3px 0 0 #4ed8af}
+.card b{font-size:18px;color:#eaf5f0}
+.desc{color:#9db5ab;font-size:13px;flex:1}
+.probe{font-size:12px;color:#9db5ab}
+.probe.ok{color:#4ed8af}.probe.warn{color:#f0b35a}.probe.bad{color:#ff7a6b}
+.custom{margin-top:16px;background:rgba(18,26,23,.92);border:1px solid #2c3a35;border-radius:4px;padding:14px 18px}
+.head{display:flex;align-items:center;justify-content:space-between}
+ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px}
+.srv{display:flex;align-items:center;gap:12px;border:1px solid #26332e;border-radius:3px;padding:8px 10px}
+.srv .who{flex:1;min-width:0}
+.srv .who b{display:block;color:#eaf5f0}
+.srv .who small{color:#7fa596;word-break:break-all}
+.empty{color:#7fa596;margin:10px 0 0}
+form{margin-top:12px;display:grid;gap:8px;border-top:1px solid #26332e;padding-top:12px}
+form label{display:grid;gap:4px;color:#9db5ab;font-size:13px}
+input[type=text],input:not([type]),form input{background:#0d1311;border:1px solid #3a4d46;color:#eaf5f0;padding:7px 10px;font:inherit;border-radius:3px}
+.norm{font-size:12px;color:#7fa596;min-height:1.4em}
+.row{display:flex;align-items:center;gap:8px}
+.grow{flex:1}
+button{font:inherit;cursor:pointer;border-radius:3px}
+button.primary,#f-save,.srv .go{background:#4ed8af;color:#0b0f0e;border:0;padding:6px 16px;font-weight:700}
+button.ghost,.srv .act{background:transparent;color:#cfe3da;border:1px solid #3a4d46;padding:5px 12px}
+button.ghost:hover,.srv .act:hover{border-color:#4ed8af}
+footer{display:flex;align-items:center;gap:12px;margin-top:14px;color:#9db5ab}
+.ver{font-size:12px;color:#7fa596}
+#status{min-height:1.6em;text-align:center;color:#f0b35a;margin:8px 0 0}
+.busy{opacity:.6;pointer-events:none}
+[hidden]{display:none!important}

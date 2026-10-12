@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+<title>卫戍协议：盟约</title>
+<link rel="stylesheet" href="chooser.css" />
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">STRONGHOLD PROTOCOL · ALLIANCE</div>
+    <h1>卫戍协议：<em>盟约</em></h1>
+    <p class="sub">选择服务器（之后随时按 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> 回到这里）</p>
+  </header>
+
+  <section class="presets">
+    <button class="card" data-mode="cloud">
+      <b>云服务器联机</b><span class="desc">独立模拟和同盟模拟都在云端；画面素材从本机读取。需要联网。</span>
+      <span class="probe" id="probe-cloud">检测中…</span>
+    </button>
+    <button class="card" data-mode="offline">
+      <b>离线单人</b><span class="desc">在这台电脑上运行游戏服务器，只本机可用，不需要联网。</span>
+      <span class="probe ok">本机 · 随时可用</span>
+    </button>
+    <button class="card" data-mode="host">
+      <b>本机开服</b><span class="desc">在这台电脑开服，同一局域网的朋友用浏览器或桌面版加入。Windows 防火墙弹窗请允许「专用网络」。</span>
+      <span class="probe ok">局域网 · 端口 3000（被占用时自动换）</span>
+    </button>
+  </section>
+
+  <section class="custom">
+    <div class="head"><h2>自定义服务器</h2><button id="add" class="ghost">＋ 添加服务器</button></div>
+    <ul id="list"></ul>
+    <p class="empty" id="empty">还没有保存的服务器。朋友开服时会显示地址，例如 <code>http://192.168.1.23:3000</code>。</p>
+    <form id="form" hidden>
+      <label>名称（可选）<input id="f-name" maxlength="40" placeholder="例如：小明家" /></label>
+      <label>地址<input id="f-url" maxlength="300" placeholder="wss://域名/ws、ws://IP:端口/ws 或 http://IP:端口" spellcheck="false" required /></label>
+      <div class="norm" id="f-norm"></div>
+      <div class="row">
+        <button type="button" id="f-test" class="ghost">测试连接</button>
+        <span class="probe" id="f-probe"></span>
+        <span class="grow"></span>
+        <button type="button" id="f-cancel" class="ghost">取消</button>
+        <button type="submit" id="f-save">保存</button>
+      </div>
+    </form>
+  </section>
+
+  <footer>
+    <label class="remember"><input type="checkbox" id="remember" /> 记住选择，下次启动直接进入</label>
+    <span class="grow"></span>
+    <span id="ver" class="ver"></span>
+    <button id="update" class="ghost">检查更新</button>
+  </footer>
+  <p id="status" role="status"></p>
+</main>
+<script src="chooser.js"></script>
+</body>
+</html>

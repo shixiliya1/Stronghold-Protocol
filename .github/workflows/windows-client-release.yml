@@ -1,6 +1,11 @@
 # Windows desktop client (electron/): 卫戍协议.exe opens the game in its own window — every file from this computer
-# (app://game/, served in-process, no local HTTP server), game sync with the remote server over WebSocket.
-# Optionally also the older portable bundle (scripts/make-windows-bundle.mjs --cloud). Built on Linux for Windows x64.
+# (app://game/, served in-process, no local HTTP server); server picker: cloud / offline / LAN host / custom servers.
+# Release assets (tag vX.Y.Z[-pre], e.g. v0.2.4-desktop.1 → app version 0.2.4-desktop.1):
+#   Stronghold-Protocol-Desktop-Setup-<version>.exe (+ .blockmap, latest.yml)  NSIS installer; electron-updater
+#                                                     updates installed copies from these (differential via blockmap)
+#   Stronghold-Protocol-Desktop-<version>-win-x64.zip  portable; its updater offers the next zip for download
+# Optionally also the older portable node.exe bundle (scripts/make-windows-bundle.mjs --cloud). Built on Linux (NSIS
+# needs wine there) for Windows x64.
 name: Windows client release
 
 on:
@@ -9,9 +14,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to create or update
+        description: Release tag to create or update (semver, e.g. v0.2.4-desktop.1)
         required: true
-        default: v0.2.4-cloud.1
+        default: v0.2.4-desktop.1
       server:
         description: Default game server (WebSocket URL)
         required: true
@@ -37,6 +42,13 @@ jobs:
       SERVER_URL: ${{ github.event.inputs.server || 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws' }}
       PORTABLE: ${{ github.event.inputs.portable || 'false' }}
     steps:
+      - name: Check the tag (semver → app version)
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag '$TAG' is not vX.Y.Z or vX.Y.Z-pre (the updater compares versions as semver)"; exit 1
+          fi
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -58,18 +70,28 @@ jobs:
           sed -i "s#^const DEFAULT_SERVER = .*#const DEFAULT_SERVER = '${SERVER_URL}';#" electron/main.js
           grep -n "^const DEFAULT_SERVER" electron/main.js
 
-      - name: Build the desktop app (Windows x64)
+      - name: Install wine (electron-builder needs it for the NSIS installer on Linux)
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends wine64 wine32:i386 > /dev/null
+          wine --version || wine64 --version
+
+      - name: Build the desktop app (Windows x64, NSIS installer + unpacked folder)
         working-directory: electron
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
         run: |
           npm ci --no-audit --no-fund
-          npx electron-builder --win dir --x64 --publish never
+          npx electron-builder --win nsis --x64 --publish never -c.extraMetadata.version="$VERSION"
+          ls -l dist
+          cat dist/latest.yml
+          (cd dist && sha256sum "Stronghold-Protocol-Desktop-Setup-$VERSION.exe" | tee "Stronghold-Protocol-Desktop-Setup-$VERSION.exe.sha256")
 
       - name: Zip the desktop app (UTF-8 file names)
         id: desktop
         run: |
-          ZIP="$RUNNER_TEMP/Stronghold-Protocol-Desktop-$TAG-win-x64.zip"
+          ZIP="$RUNNER_TEMP/Stronghold-Protocol-Desktop-$VERSION-win-x64.zip"
           python3 - electron/dist/win-unpacked "$ZIP" <<'PY'
           import os, sys, zipfile
           src, out = sys.argv[1], sys.argv[2]
@@ -80,7 +102,7 @@ jobs:
                       p = os.path.join(d, f)
                       z.write(p, top + '/' + os.path.relpath(p, src).replace(os.sep, '/'))
           PY
-          sha256sum "$ZIP" | tee "$ZIP.sha256"
+          (cd "$RUNNER_TEMP" && sha256sum "$(basename "$ZIP")" | tee "$ZIP.sha256")
           ls -l "$ZIP"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
@@ -100,7 +122,7 @@ jobs:
                       p = os.path.join(d, f)
                       z.write(p, p.replace(os.sep, '/'))
           PY
-          sha256sum "$ZIP" | tee "$ZIP.sha256"
+          (cd "$RUNNER_TEMP" && sha256sum "$(basename "$ZIP")" | tee "$ZIP.sha256")
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
       - name: List the release files
@@ -111,6 +133,8 @@ jobs:
         run: |
           {
             echo "list<<EOF"
+            SETUP="electron/dist/Stronghold-Protocol-Desktop-Setup-$VERSION.exe"
+            printf '%s\n' "$SETUP" "$SETUP.sha256" "$SETUP.blockmap" electron/dist/latest.yml
             for z in "$DESKTOP_ZIP" "$PORTABLE_ZIP"; do
               if [ -n "$z" ]; then printf '%s\n%s\n' "$z" "$z.sha256"; fi
             done
@@ -124,8 +148,10 @@ jobs:
           name: Windows client ${{ env.TAG }}
           target_commitish: ${{ github.sha }}
           body: |
-            卫戍协议：盟约 Windows 桌面客户端（非官方同人，严禁盈利；游戏素材版权归原权利人，见 NOTICE.md）。
-            解压后双击「卫戍协议.exe」：独立窗口，画面与素材都从本机读取，连接云服务器进行联机。
+            卫戍协议：盟约 Windows 桌面客户端 ${{ env.VERSION }}（非官方同人，严禁盈利；游戏素材版权归原权利人，见 NOTICE.md）。
+            · 安装版（推荐，可自动更新）：下载 Stronghold-Protocol-Desktop-Setup-${{ env.VERSION }}.exe 运行安装。
+            · 便携版：下载 Stronghold-Protocol-Desktop-${{ env.VERSION }}-win-x64.zip，解压后双击「卫戍协议.exe」。
+            启动时选择服务器：云服务器联机 / 离线单人 / 本机开服 / 自定义服务器（Ctrl+Shift+M 随时切换）。
             未签名程序：Windows SmartScreen 提示时点「更多信息 → 仍要运行」。
           files: ${{ steps.files.outputs.list }}
           fail_on_unmatched_files: true
