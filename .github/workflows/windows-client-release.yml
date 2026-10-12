@@ -125,7 +125,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           body: |
             卫戍协议：盟约 Windows 桌面客户端（非官方同人，严禁盈利；游戏素材版权归原权利人，见 NOTICE.md）。
-            解压后双击「卫戍协议.exe」：独立窗口，画面与素材都从本机读取，对局同步连 ${{ env.SERVER_URL }}。
+            解压后双击「卫戍协议.exe」：独立窗口，画面与素材都从本机读取，连接云服务器进行联机。
             未签名程序：Windows SmartScreen 提示时点「更多信息 → 仍要运行」。
           files: ${{ steps.files.outputs.list }}
           fail_on_unmatched_files: true
