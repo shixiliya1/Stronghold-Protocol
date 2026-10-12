@@ -76,7 +76,7 @@ chooser = chooser
   .replace(/script-src 'self'/, "script-src 'self'; connect-src 'self' https: wss: ws: http:")
   .replace('<meta charset="utf-8" />', '<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />')
   .replace('<link rel="stylesheet" href="chooser.css" />', '<link rel="stylesheet" href="chooser.css" />\n<link rel="stylesheet" href="mobile.css" />\n<link rel="manifest" href="../manifest.json" />')
-  .replace('<script src="chooser.js"></script>', '<script src="config.js"></script>\n<script src="art-state.js"></script>\n<script src="art-ui.js"></script>\n<script src="web-api.js"></script>\n<script src="chooser.js"></script>');
+  .replace('<script src="chooser.js"></script>', '<script src="config.js"></script>\n<script src="art-state.js"></script>\n<script src="cap-core.js"></script>\n<script src="art-ui.js"></script>\n<script src="web-api.js"></script>\n<script src="chooser.js"></script>');
 await fsp.writeFile(path.join(CL, 'index.html'), chooser);
 const config = { platform: target, version: VERSION, game: GAME, protocol: PROTOCOL_VERSION, cloud: CLOUD, base: BASE,
   repo: 'shixiliya1/Stronghold-Protocol', offlineUrl: 'ws://offline.invalid/ws' };
@@ -89,6 +89,12 @@ if (ART_PACK) {
 }
 await fsp.writeFile(path.join(CL, 'config.js'), `window.SP_CLIENT = ${JSON.stringify(config)};\n`);
 
+// @capacitor/core for the page (registerPlugin / plugin proxies; the injected native bridge has only the transport)
+await build({
+  entryPoints: [path.join(MOBILE, 'src', 'cap-core.js')],
+  outfile: path.join(CL, 'cap-core.js'),
+  bundle: true, format: 'iife', platform: 'browser', target: 'es2019', minify: true, legalComments: 'none', logLevel: 'warning',
+});
 await build({
   entryPoints: [path.join(MOBILE, 'src', 'offline-server.js')],
   outfile: path.join(CL, 'offline-server.js'),

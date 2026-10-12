@@ -6,7 +6,7 @@
   var A = window.SP_ART;
   if (!A || !A.pack || A.ready) return;
   var cap = window.Capacitor;
-  var plugin = cap && cap.registerPlugin ? cap.registerPlugin('ArtPack') : null;
+  var plugin = window.SP_ARTPACK || (cap && cap.registerPlugin ? cap.registerPlugin('ArtPack') : null);
   var mb = function (n) { return (n / 1048576).toFixed(1) + ' MB'; };
   var box = document.createElement('div');
   box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;background:rgba(11,15,14,.96);color:#d8e3de;font:14px/1.55 "Noto Sans SC",system-ui,sans-serif;padding:16px');

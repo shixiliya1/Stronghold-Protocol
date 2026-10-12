@@ -106,6 +106,7 @@ jobs:
           node scripts/build-www.mjs --target android --version "$VERSION" --cloud "$SERVER_URL" --art-pack "$RUNNER_TEMP/art/art-pack.json"
           if [ -n "$(find www/assets -type f 2>/dev/null | head -1)" ]; then echo "::error::art bundled in the APK"; exit 1; fi
           du -sh www
+          node scripts/check-apk.mjs www
           npx cap sync android
 
       - name: Smoke test (offline single-player in a phone-sized headless Chrome)
@@ -145,6 +146,9 @@ jobs:
           (cd "$RUNNER_TEMP" && sha256sum "$(basename "$APK")" | tee "$APK.sha256")
           ls -l "$APK"
           echo "APK=$APK" >> "$GITHUB_ENV"
+
+      - name: ArtPack native plugin reachable (dex, registration, cap-core before art-ui, bridge call)
+        run: node mobile/scripts/check-apk.mjs "$APK"
 
       - name: Publish (add to the release)
         uses: softprops/action-gh-release@v2
