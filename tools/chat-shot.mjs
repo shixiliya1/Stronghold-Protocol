@@ -1,9 +1,9 @@
 // Screenshots of the room chat (not a test file): two players in a co-op room chat; a solo match with the chat open.
-//   node test/e2e/chat-shot.mjs [--base http://127.0.0.1:3000] [--out /workspace/chat-shots]
+//   node tools/chat-shot.mjs [--base http://127.0.0.1:3000] [--out /workspace/chat-shots]
 import fs from 'node:fs';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
-import { Client, sleep, startRealServer } from './client.mjs';
+import { Client, sleep, startRealServer } from '../test/e2e/client.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const OUT = path.resolve(arg('out', '/workspace/chat-shots'));

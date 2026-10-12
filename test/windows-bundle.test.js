@@ -40,8 +40,10 @@ describe('make-windows-bundle.mjs: --out 不能指向仓库自己或它的上级
     const { outDirIsUnsafe } = await mod('scripts/make-windows-bundle.mjs');
     // Linux 的默认文件系统区分大小写：`/HOME/X` 就是另一个目录，放行才对。
     const sameThing = process.platform !== 'linux';
-    assert.equal(outDirIsUnsafe(ROOT.toUpperCase()), sameThing, `大写写法的仓库路径（${ROOT.toUpperCase()}）`);
-    assert.equal(outDirIsUnsafe(ROOT.replace(/\//g, path.sep).toLowerCase()), sameThing, '全小写写法');
+    // A spelling identical to ROOT (a checkout path without letters of that case, e.g. /workspace/x) is ROOT itself.
+    const upper = ROOT.toUpperCase(), lower = ROOT.replace(/\//g, path.sep).toLowerCase();
+    assert.equal(outDirIsUnsafe(upper), upper === ROOT || sameThing, `大写写法的仓库路径（${upper}）`);
+    assert.equal(outDirIsUnsafe(lower), lower === ROOT || sameThing, '全小写写法');
   });
 
   test('经过符号链接的路径会被认出来（macOS 的 /tmp 就是指向 /private/tmp 的链接）', async () => {

@@ -53,7 +53,7 @@ export function cleanChat(raw) {
   return filterProfanity(s);
 }
 
-/** Does this server relay room chat? @param {unknown} welcome the `welcome` message */
+/** Does this server relay room chat? @param {any} welcome the `welcome` message */
 export function serverHasChat(welcome) {
   return !!welcome && Array.isArray(welcome.features) && welcome.features.includes(CHAT_FEATURE);
 }
