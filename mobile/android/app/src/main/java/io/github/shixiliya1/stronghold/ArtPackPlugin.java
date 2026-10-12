@@ -30,7 +30,7 @@ import org.json.JSONObject;
  */
 @CapacitorPlugin(name = "ArtPack")
 public class ArtPackPlugin extends Plugin {
-    private static final String[] MIRRORS = { "", "https://gh-proxy.com/", "https://ghfast.top/" };
+    private static final String[] MIRRORS = { "", "https://ghfast.top/", "https://gh-proxy.com/" };
     private volatile Thread worker;
     private volatile JSObject last;
 

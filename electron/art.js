@@ -17,7 +17,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 export const STATE_FILE = '.art-state.json';
-export const MIRRORS = ['', 'https://gh-proxy.com/', 'https://ghfast.top/'];
+export const MIRRORS = ['', 'https://ghfast.top/', 'https://gh-proxy.com/']; // gh-proxy ignores Range (whole zip): last
 const GAP = 256 * 1024;        // merge files into one span when the bytes between them are at most this
 const SPAN_MAX = 48 << 20;     // …and the span stays at most this big (granularity of retry / progress)
 const PARALLEL = 3;
