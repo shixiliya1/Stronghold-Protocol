@@ -5,6 +5,7 @@ import { DIFFICULTIES, NAME_MAX_LEN, ROOM_CODE_LEN, MAX_SEATS, EMOTES, GEO } fro
 import { isDroppableChess } from './standIn.js';
 import { diySlotIds, validateDiyPicks } from './diy.js';
 import { CHAT_RAW_MAX } from './chat.js';
+import { HALL_SIZES } from './hall.js';
 import { cultivatedStats, isPotential, isCultivate, POTENTIAL_DEFAULT, CULTIVATE_DEFAULT } from './potential.js';
 
 // ---- tiny validators -------------------------------------------------------
@@ -415,6 +416,10 @@ export const C2S = {
   // room text chat (shared/chat.js; servers with welcome.features 'chat'): cleaned and rate-limited by the server, relayed to
   // the room's members (seats + spectators) as room.chat { playerId, name, text, at, spectator? } — in the lobby and in a match
   'room.chat': { text: (v) => typeof v === 'string' && v.length <= CHAT_RAW_MAX },
+  // 联机大厅 (shared/hall.js): lobby stats / room list subscription, 最快匹配, and the host listing a co-op room publicly
+  'lobby.sub': { on: isBool, list: isBool, $optional: ['list'] },
+  'lobby.quick': { size: (v) => HALL_SIZES.includes(v), difficulty: (v) => DIFFICULTIES.includes(v) },
+  'room.setPublic': { on: isBool },
 
   // match
   'g.infoReady': { setupRevision: (v) => isInt(v, 0, 2 ** 31), $optional: ['setupRevision'] },
@@ -475,6 +480,8 @@ export const C2S = {
 export const S2C = [
   'welcome', 'ok', 'error', 'pong',
   'room.state', 'room.closed', 'room.chat',
+  // 联机大厅 (shared/hall.js): only to sessions that sent lobby.sub
+  'lobby.stats', 'lobby.rooms',
   'm.public', 'm.private', 'm.field', 'm.toast', 'm.ticker', 'm.emote', 'm.result',
   // m.layer { playerId, bondId, add } — own live prep layer gain; ephemeral, never replayed on resync.
   'm.layer',

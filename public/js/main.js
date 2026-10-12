@@ -57,6 +57,7 @@ import { initLang, useLang, tickerText } from './ui/lang.js';
 import { t, N_, translateWire } from '../../shared/i18n.js';
 import { recordError } from './diag.js';
 import { serverHasChat } from '../../shared/chat.js';
+import { serverHasHall } from '../../shared/hall.js';
 
 const RESTORE_GRACE_MS = 1500;
 const JOIN_DELAY_MS = 350;
@@ -153,7 +154,7 @@ function onWelcome(msg) {
   const prevId = prev.me.playerId;
   const name = typeof msg.name === 'string' && msg.name ? msg.name : prev.me.name;
   identity.saveName(name);
-  store.set({ me: { playerId: msg.playerId ?? null, name, token: typeof msg.token === 'string' ? msg.token : null }, features: { chat: serverHasChat(msg) } });
+  store.set({ me: { playerId: msg.playerId ?? null, name, token: typeof msg.token === 'string' ? msg.token : null }, features: { chat: serverHasChat(msg), lobby: serverHasHall(msg) }, hall: { stats: null, rooms: null } });
   welcomeAt = Date.now();
 
   if (prevId != null && prevId !== msg.playerId) {
@@ -258,6 +259,15 @@ function wireNet() {
     // its broadcast priority: the strip plays the highest first (ui/ticker.js enqueueTickerLines)
     const priority = Number.isFinite(msg.priority) ? msg.priority : 0;
     store.set((s) => ({ ticker: [...s.ticker.slice(-(TICKER_KEEP - 1)), { id: ++seq, text, at: Date.now(), type, playerId, round: s.match?.public?.round ?? null, priority }] }));
+  });
+  net.on('lobby.stats', (msg) => {
+    const n = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
+    store.set((s) => ({ hall: { ...s.hall, stats: { online: n(msg.online), rooms: n(msg.rooms), inMatch: n(msg.inMatch), joinable: n(msg.joinable) } } }));
+  });
+  net.on('lobby.rooms', (msg) => {
+    const rooms = (Array.isArray(msg.rooms) ? msg.rooms : []).slice(0, 50).filter((r) => r && typeof r.code === 'string')
+      .map((r) => ({ code: r.code, host: typeof r.host === 'string' ? r.host.slice(0, 40) : '', humans: Number(r.humans) || 0, size: Number(r.size) || 4, difficulty: String(r.difficulty || '') }));
+    store.set((s) => ({ hall: { ...s.hall, rooms } }));
   });
   net.on('room.chat', (msg) => {
     if (typeof msg.text !== 'string' || !msg.text) return;

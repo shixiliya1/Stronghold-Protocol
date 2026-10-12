@@ -228,6 +228,23 @@ function AiLastToggle({ option, busy, onToggle }) {
   </div>`;
 }
 
+/** 联机大厅: the host lists the co-op room publicly (room.setPublic); shown when the server supports the 'lobby' feature. */
+function PublicToggle({ room, myId, busy, onToggle }) {
+  const enabled = useStore((s) => !!s.features?.lobby);
+  if (!enabled || !room || room.mode === 'solo') return null;
+  const on = room.public === true;
+  const editable = room.hostId != null && room.hostId === myId;
+  return html`<div class="ailast">
+    <${Tooltip} text=${t('公开后，联机大厅的玩家可以在房间列表看到并加入（最快匹配也会匹配到）')}>
+      <button type="button" role="switch" aria-checked=${on ? 'true' : 'false'}
+          class=${`dpick__opt ailast__opt${on ? ' is-active' : ''}`} disabled=${!editable || !!busy}
+          onClick=${() => editable && onToggle(!on)}>
+        <${Icon} name="check" class=${on ? 'is-on' : ''} />${t('公开到联机大厅')}${room.size && room.size < MAX_SEATS ? ` · ${t('{n}人', { n: room.size })}` : ''}
+      </button>
+    <//>
+  </div>`;
+}
+
 /** Room screen component. */
 export function RoomScreen() {
   const room = useStore((s) => s.room);
@@ -269,6 +286,7 @@ export function RoomScreen() {
   };
   const setDifficulty = (difficulty) => run('diff', () => net.request('room.setDifficulty', { difficulty }));
   const setAiLast = (on) => run('ailast', () => net.request('room.setAiPicksLast', { on }));
+  const setPublic = (on) => run('public', () => net.request('room.setPublic', { on }));
   // spectator seats: the host frees one; a spectator takes a free player seat with room.join of this room
   const removeSpectator = (playerId) => run(`rs${playerId}`, () => net.request('room.removeSpectator', { playerId }));
   const sit = () => run('sit', () => net.request('room.join', { code: room.code }));
@@ -352,6 +370,7 @@ export function RoomScreen() {
         <div class="room-bar__opts">
           <${DifficultyPicker} room=${room} isHost=${facts.isHost} busy=${busy} onPick=${setDifficulty} />
           <${AiLastToggle} option=${aiLastOption(room, me.playerId)} busy=${busy} onToggle=${setAiLast} />
+          <${PublicToggle} room=${room} myId=${me.playerId} busy=${busy} onToggle=${setPublic} />
         </div>
       </div>
       <div class="room-bar__center">

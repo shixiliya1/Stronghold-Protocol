@@ -85,6 +85,8 @@ export const initialState = Object.freeze({
   // room text chat (ui/chat.js): recent room.chat lines; features: what the server supports (welcome.features)
   chat: [],
   features: {},
+  // 联机大厅 (ui/hall.js): the last lobby.stats / lobby.rooms of the server (null until subscribed)
+  hall: { stats: null, rooms: null },
   clock: { offset: 0, rtt: null, synced: false },
   ui: { pendingJoin: null, restoring: false, buildStale: false },
 });

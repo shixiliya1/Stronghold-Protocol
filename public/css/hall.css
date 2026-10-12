@@ -1,0 +1,22 @@
+/* 联机大厅 (public/js/ui/hall.js) */
+.hall-panel .panel__body { display: flex; flex-direction: column; gap: .14rem; padding: .2rem .26rem; }
+.hall-head { display: flex; align-items: center; justify-content: space-between; gap: .12rem; }
+.hall-title { display: flex; align-items: center; gap: .1rem; font-weight: 700; font-size: calc(.18 * var(--t)); color: var(--text-hi, #eaf5f0); }
+.hall-title .icon { width: .22rem; height: .22rem; color: var(--mint-500); }
+.hall-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .1rem; }
+.hall-stats > span { display: flex; flex-direction: column; align-items: center; padding: .08rem; border: 1px solid var(--line-2); background: var(--bg-2); font-size: calc(.13 * var(--t)); color: var(--text-md, #9db5ab); }
+.hall-stats b { font-size: calc(.26 * var(--t)); color: var(--text-hi, #eaf5f0); line-height: 1.2; }
+.hall-stats .is-open b { color: var(--mint-500); }
+.hall-row { display: flex; align-items: center; gap: .12rem; flex-wrap: wrap; }
+.hall-pref { display: flex; align-items: center; gap: .08rem; font-size: calc(.14 * var(--t)); color: var(--text-md, #9db5ab); }
+.hall-pref select { background: var(--bg-1); color: var(--text-hi, #eaf5f0); border: 1px solid var(--line-3); padding: .04rem .08rem; font: inherit; }
+.hall-quick { margin-left: auto; }
+.hall-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .06rem; max-height: 2.6rem; overflow: auto; }
+.hall-room { display: flex; align-items: center; gap: .12rem; padding: .06rem .1rem; border: 1px solid var(--line-2); background: var(--bg-1); }
+.hall-room__who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hall-room__who small { color: var(--text-lo, #7fa596); }
+.hall-room__diff, .hall-empty { font-size: calc(.13 * var(--t)); color: var(--text-md, #9db5ab); }
+.hall-room__n { color: var(--mint-500); }
+.online-badge { display: inline-flex; align-items: center; gap: .06rem; padding: .02rem .1rem; border: 1px solid var(--mint-800); border-radius: 999px; font-size: calc(.13 * var(--t)); color: var(--mint-500); white-space: nowrap; }
+.online-badge__dot { width: .08rem; height: .08rem; border-radius: 50%; background: var(--mint-500); box-shadow: 0 0 .06rem var(--mint-500); }
+.room-public { display: inline-flex; align-items: center; gap: .08rem; font-size: calc(.14 * var(--t)); color: var(--text-md, #9db5ab); cursor: pointer; }

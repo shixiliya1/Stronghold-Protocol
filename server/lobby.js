@@ -106,6 +106,7 @@ import { getData as defaultGetData, lookup } from './data.js';
 import { Match as DefaultMatch } from './match/Match.js';
 import { KITTED_CHARS } from './sim/content/kits/index.js';
 import { cleanChat, chatAllowed, CHAT_FEATURE } from '../shared/chat.js';
+import { HALL_FEATURE, HALL_TICK_MS, HALL_LIST_MAX, pickRoom } from '../shared/hall.js';
 
 /** Room code alphabet: uppercase letters without I and O (and no digits, so no 0/1). */
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -180,6 +181,9 @@ export class Room {
      * put every human seat before every AI seat (Match opts.aiPicksLast). Kept across the room's matches.
      */
     this.aiPicksLast = false;
+    /** 联机大厅 (shared/hall.js): listed publicly (strangers may join) and the most players it takes (≤ MAX_SEATS) */
+    this.public = false;
+    this.size = MAX_SEATS;
     /** @type {string | null} */
     this.hostId = null;
     /** @type {(Seat | null)[]} */
@@ -230,6 +234,8 @@ export class Room {
       mode: this.mode,
       difficulty: this.difficulty,
       aiPicksLast: this.aiPicksLast,
+      public: this.public,
+      size: this.size,
       inMatch: !!this.match,
       seats: this.seats.map((s) => (s
         ? { seat: s.seat, playerId: s.playerId, name: s.name, isBot: s.isBot, ready: s.ready, connected: s.connected && !s.left }
@@ -352,6 +358,9 @@ export class Lobby {
       case 'room.spectate': return this.spectate(session, msg);
       case 'room.removeSpectator': return this.removeSpectator(session, msg);
       case 'room.chat': return this.chat(session, msg);
+      case 'room.setPublic': return this.setPublic(session, msg);
+      case 'lobby.sub': return this.hallSub(session, msg);
+      case 'lobby.quick': return this.hallQuick(session, msg);
       default:
         if (typeof msg.t === 'string' && msg.t.startsWith('g.')) return this.routeGame(session, msg);
         return fail(ERR.BAD_MSG, `unhandled type ${String(msg.t).slice(0, 32)}`);
@@ -394,13 +403,15 @@ export class Lobby {
     this.graceTimers.clear();
     for (const t of this.resyncTimers.values()) clearTimeout(t);
     this.resyncTimers.clear();
+    if (this.hallTimer) { clearInterval(this.hallTimer); this.hallTimer = null; }
   }
 
   // ---------------------------------------------------------------------------------------------------
   // room.* handlers
   // ---------------------------------------------------------------------------------------------------
 
-  create(session, { mode, difficulty }) {
+  /** @param {any} session @param {{ mode: string, difficulty: string }} msg @param {{ public?: boolean, size?: number } | null} [hall] 最快匹配's room */
+  create(session, { mode, difficulty }, hall = null) {
     const cur = this.roomOf(session);
     if (cur && cur.match) return fail(ERR.ROOM_STARTED, 'leave your running match first');
     if (this.rooms.size >= this.opts.maxRooms) return fail(ERR.INTERNAL, 'too many rooms');
@@ -418,6 +429,7 @@ export class Lobby {
     if (cur) this.removeMember(cur, session.playerId);
     const room = new Room(code, mode, difficulty, this.now());
     room.ownerKey = key;
+    if (hall) { room.public = !!hall.public; room.size = hall.size || MAX_SEATS; }
     room.seats[0] = this.humanSeat(0, session);
     room.hostId = session.playerId;
     this.rooms.set(code, room);
@@ -441,6 +453,7 @@ export class Lobby {
     if (room.mode === 'solo') return fail(ERR.ROOM_FULL, 'solo room');
     const idx = room.freeSeat();
     if (idx < 0) return fail(ERR.ROOM_FULL);
+    if (room.activeHumans().length >= room.size) return fail(ERR.ROOM_FULL);
     if (cur) this.removeMember(cur, session.playerId);
     room.seats[idx] = this.humanSeat(idx, session);
     session.roomCode = room.code;
@@ -707,7 +720,7 @@ export class Lobby {
 
   /** Extra fields of every `welcome` (net.js): the operators a 自选 slot may field (shared/diy.js `kitted`). */
   welcomeInfo() {
-    return { diyKitted: KITTED_CHARS, features: [CHAT_FEATURE] };
+    return { diyKitted: KITTED_CHARS, features: [CHAT_FEATURE, HALL_FEATURE] };
   }
 
   /**
@@ -740,6 +753,92 @@ export class Lobby {
   // ---------------------------------------------------------------------------------------------------
 
   /** @param {Room} room @param {string | null} [key] per-network limit key of the starter */
+  // ---------------------------------------------------------------------------------------------------
+  // 联机大厅 (shared/hall.js): online count, room stats, the public room list, 最快匹配
+  // ---------------------------------------------------------------------------------------------------
+
+  /** A co-op room a stranger may join now (listed publicly, lobby, a free seat, below its size). @param {Room} r */
+  hallJoinable(r) {
+    return !r.disposed && r.public && r.mode === 'coop' && !r.match && r.freeSeat() >= 0 && r.activeHumans().length < r.size;
+  }
+
+  /** Snapshot of the counters and the public room list. */
+  hallSnapshot() {
+    let online = 0;
+    for (const s of this.registry.byPlayerId.values()) if (s.connected) online++;
+    let inMatch = 0;
+    const open = [];
+    for (const r of this.rooms.values()) {
+      if (r.match) inMatch++;
+      if (this.hallJoinable(r)) open.push(r);
+    }
+    open.sort((a, b) => (b.activeHumans().length - a.activeHumans().length) || (a.createdAt - b.createdAt));
+    const rooms = open.slice(0, HALL_LIST_MAX).map((r) => {
+      const host = r.seatOf(r.hostId || '');
+      return { code: r.code, host: host ? host.name : '', humans: r.activeHumans().length, size: r.size, difficulty: r.difficulty };
+    });
+    return { stats: { t: 'lobby.stats', online, rooms: this.rooms.size, inMatch, joinable: open.length }, rooms: { t: 'lobby.rooms', rooms } };
+  }
+
+  /** lobby.sub { on, list }: the session gets lobby.stats (and lobby.rooms) now and on every change (hallTick). */
+  hallSub(session, { on, list = false }) {
+    if (!this.hallSubs) this.hallSubs = new Map();
+    if (!on) { this.hallSubs.delete(session.playerId); return OK; }
+    this.hallSubs.set(session.playerId, { list: !!list, stats: null, rooms: null });
+    this.hallSendTo(session, this.hallSubs.get(session.playerId), this.hallSnapshot());
+    if (!this.hallTimer) {
+      this.hallTimer = setInterval(() => this.hallTick(), HALL_TICK_MS);
+      if (typeof this.hallTimer.unref === 'function') this.hallTimer.unref();
+    }
+    return OK;
+  }
+
+  hallSendTo(session, sub, snap) {
+    if (!session.connected) return;
+    const st = JSON.stringify(snap.stats);
+    if (st !== sub.stats) { sub.stats = st; sendSession(session, snap.stats); }
+    if (sub.list) {
+      const rs = JSON.stringify(snap.rooms);
+      if (rs !== sub.rooms) { sub.rooms = rs; sendSession(session, snap.rooms); }
+    }
+  }
+
+  /** Throttled push (every HALL_TICK_MS): only what changed, only to subscribers. */
+  hallTick() {
+    if (!this.hallSubs || !this.hallSubs.size) { if (this.hallTimer) { clearInterval(this.hallTimer); this.hallTimer = null; } return; }
+    const snap = this.hallSnapshot();
+    for (const [id, sub] of this.hallSubs) {
+      const session = this.registry.byId(id);
+      if (!session) { this.hallSubs.delete(id); continue; }
+      this.hallSendTo(session, sub, snap);
+    }
+  }
+
+  /** room.setPublic { on }: the host lists the co-op room in the 联机大厅 (or takes it out). */
+  setPublic(session, { on }) {
+    const room = this.roomOf(session);
+    if (!room) return fail(ERR.NOT_IN_ROOM);
+    if (room.hostId !== session.playerId) return fail(ERR.NOT_HOST);
+    if (room.mode === 'solo') return fail(ERR.BAD_TARGET, 'solo rooms are private');
+    if (room.public !== on) { room.public = on; this.broadcastState(room); }
+    return OK;
+  }
+
+  /** lobby.quick { size, difficulty }: join the best open public room (pickRoom), else create a public one. */
+  hallQuick(session, { size, difficulty }) {
+    const cur = this.roomOf(session);
+    if (cur && cur.match) return fail(ERR.ROOM_STARTED, 'leave your running match first');
+    if (cur && cur.public && cur.mode === 'coop' && (!size || cur.size === size)) { this.sendState(cur, session); return OK; } // already waiting in one
+    const open = [];
+    for (const r of this.rooms.values()) {
+      if (r === cur || !this.hallJoinable(r) || r.seatOf(session.playerId)) continue;
+      open.push({ room: r, humans: r.activeHumans().length, size: r.size, createdAt: r.createdAt });
+    }
+    const best = pickRoom(open, size);
+    if (best) return this.join(session, { code: best.room.code });
+    return this.create(session, { mode: 'coop', difficulty }, { public: true, size: size || MAX_SEATS });
+  }
+
   startMatch(room, key = null) {
     const host = room.seatOf(room.hostId);
     if (host) host.ready = true;
