@@ -27,14 +27,9 @@
       "buildResources": "build"
     },
     "files": [
-      "main.js",
-      "protocol.js",
-      "art.js",
-      "servers.js",
-      "updater.js",
-      "update-check.js",
-      "server-host.mjs",
-      "preload.cjs",
+      "*.js",
+      "*.mjs",
+      "*.cjs",
       "ui/**",
       "package.json"
     ],
