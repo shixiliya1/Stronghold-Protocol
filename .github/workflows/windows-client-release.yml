@@ -31,6 +31,10 @@ on:
         description: Also attach the portable node.exe bundle (+~476 MB)
         type: boolean
         default: false
+      publish:
+        description: Publish the release (off = build + checks only, nothing is released)
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       tag:
@@ -64,6 +68,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      art_tag: ${{ steps.meta.outputs.art_tag }}
+      art_bytes: ${{ steps.meta.outputs.art_bytes }}
+      game_version: ${{ steps.meta.outputs.game_version }}
+      local_art: ${{ steps.meta.outputs.local_art }}
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
       SERVER_URL: ${{ inputs.server || 'wss://stronghold-xili.japaneast.cloudapp.azure.com/ws' }}
@@ -149,6 +159,11 @@ jobs:
           du -sh dist/win-unpacked
           (cd dist && sha256sum "Stronghold-Protocol-Desktop-Setup-$VERSION.exe" | tee "Stronghold-Protocol-Desktop-Setup-$VERSION.exe.sha256")
 
+      - name: Packaged app check (every import from main.js resolves inside app.asar / resources/game)
+        run: |
+          npx -y @electron/asar@3 extract electron/dist/win-unpacked/resources/app.asar "$RUNNER_TEMP/app-asar"
+          node tools/check-electron-pack.mjs "$RUNNER_TEMP/app-asar" electron/dist/win-unpacked/resources/game
+
       - name: Zip the desktop app (UTF-8 file names)
         id: desktop
         run: |
@@ -202,6 +217,67 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Stage the release files
+        id: meta
+        env:
+          LIST: ${{ steps.files.outputs.list }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          printf '%s\n' "$LIST" | while read -r f; do [ -n "$f" ] && cp "$f" "$RUNNER_TEMP/release/"; done
+          ls -l "$RUNNER_TEMP/release"
+          { echo "version=$VERSION"; echo "art_tag=$ART_TAG"; echo "art_bytes=$ART_BYTES"; echo "game_version=$GAME_VERSION"; echo "local_art=$LOCAL_ART"; } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: ${{ runner.temp }}/release
+          retention-days: 3
+
+  # Launch the packaged app on Windows: main.js --smoke loads every main-process module and the bundled game server,
+  # writes SP_SMOKE_OK and quits (a missing module = ERR_MODULE_NOT_FOUND = no file).
+  smoke:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: release
+      - name: Launch the packaged app (--smoke)
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          Expand-Archive "release/Stronghold-Protocol-Desktop-$env:VERSION-win-x64.zip" -DestinationPath app
+          $exe = Get-ChildItem app -Recurse -Filter *.exe | Where-Object { $_.Directory.Name -eq '卫戍协议' -and $_.Name -like '卫戍协议*.exe' } | Select-Object -First 1
+          if (-not $exe) { $exe = Get-ChildItem app -Recurse -Filter *.exe | Where-Object { $_.Name -notmatch 'Uninstall|elevate' } | Select-Object -First 1 }
+          Write-Host "exe: $($exe.FullName)"
+          $env:SP_SMOKE_OUT = "$PWD\smoke.txt"
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke','--disable-gpu' -PassThru
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); Write-Error 'smoke: app did not quit within 120 s' }
+          if (-not (Test-Path smoke.txt)) { Write-Error "smoke: no SP_SMOKE_OK (exit $($p.ExitCode))"; exit 1 }
+          Get-Content smoke.txt
+          if (-not (Select-String -Path smoke.txt -Pattern "SP_SMOKE_OK .* $env:VERSION")) { Write-Error 'smoke: wrong version'; exit 1 }
+
+  publish:
+    needs: [build, smoke]
+    if: inputs.publish != false
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      BUILD_REF: ${{ inputs.ref || github.sha }}
+      VERSION: ${{ needs.build.outputs.version }}
+      ART_TAG: ${{ needs.build.outputs.art_tag }}
+      ART_BYTES: ${{ needs.build.outputs.art_bytes }}
+      GAME_VERSION: ${{ needs.build.outputs.game_version }}
+      LOCAL_ART: ${{ needs.build.outputs.local_art }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: release
+
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
@@ -218,5 +294,5 @@ jobs:
             启动时选择服务器：云服务器联机 / 离线单人 / 本机开服 / 自定义服务器（Ctrl+Shift+M 随时切换）。
             游戏版本 ${{ env.GAME_VERSION }}（含本地客户端美术：${{ env.LOCAL_ART }}）。云服务器联机需要服务器运行同一游戏版本；版本不同时选择页会提示，可改用离线单人 / 本机开服。
             未签名程序：Windows SmartScreen 提示时点「更多信息 → 仍要运行」。
-          files: ${{ steps.files.outputs.list }}
+          files: release/*
           fail_on_unmatched_files: true

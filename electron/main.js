@@ -338,6 +338,15 @@ if (!app.requestSingleInstanceLock()) {
     const { createStaticHandler } = await import(pathToFileURL(path.join(GAME_ROOT, 'server', 'http', 'static.js')).href);
     const { APP_VERSION, PROTOCOL_VERSION } = await import(pathToFileURL(path.join(GAME_ROOT, 'shared', 'constants.js')).href);
     LOCAL = { app: APP_VERSION, protocol: PROTOCOL_VERSION };
+    // CI smoke (windows-client-release.yml): every main-process module and the bundled game server loaded → report, quit
+    if (process.argv.includes('--smoke')) {
+      await import(pathToFileURL(path.join(GAME_ROOT, 'server', 'index.js')).href);
+      const fs = await import('node:fs');
+      const out = process.env.SP_SMOKE_OUT;
+      if (out) fs.writeFileSync(out, `SP_SMOKE_OK ${APP_VERSION} ${app.getVersion()}\n`);
+      app.exit(0);
+      return;
+    }
     const serveStatic = createStaticHandler({
       publicDir: path.join(GAME_ROOT, 'public'),
       dataDir: path.join(GAME_ROOT, 'data'),
