@@ -35,6 +35,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - name: Dependencies (ws for the server, postject for the injection)
         shell: bash
         run: npm ci --ignore-scripts --no-audit --no-fund && npm i --no-save --no-audit --no-fund postject

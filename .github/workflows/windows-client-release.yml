@@ -116,6 +116,15 @@ jobs:
           sed -i "s#^const DEFAULT_SERVER = .*#const DEFAULT_SERVER = '${SERVER_URL}';#" electron/main.js
           grep -n "^const DEFAULT_SERVER" electron/main.js
 
+      - name: Cache electron / electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: electron-${{ runner.os }}-${{ hashFiles('electron/package-lock.json', 'package-lock.json') }}
+          restore-keys: electron-${{ runner.os }}-
+
       - name: Install wine (electron-builder needs it for the NSIS installer on Linux)
         run: |
           sudo dpkg --add-architecture i386

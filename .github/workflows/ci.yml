@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   test:
-    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    name: test (${{ matrix.os }}, node ${{ matrix.node }}, shard ${{ matrix.shard }}/4)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -23,6 +23,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         # 22 and 24 = the maintained LTS lines (24 is what `winget install OpenJS.NodeJS.LTS` installs today)
         node: [22, 24]
+        # node --test --test-shard splits the test files 4 ways: ~4 min per job instead of ~15
+        shard: [1, 2, 3, 4]
     env:
       # Browser/E2E suites gate themselves on these (and on a local Chrome + downloaded game assets, which CI never
       # has): keep them off explicitly. Suites that need .cache/gamedata, public/assets or data/local-assets.json skip.
@@ -38,14 +40,24 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      # node_modules + the vendored copies, keyed by OS / node / lockfile; on a hit npm ci is skipped
+      - id: nm
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            public/vendor
+          key: nm-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json', 'tools/vendor.mjs') }}
+
       - name: Install (npm ci → postinstall copies public/vendor)
+        if: steps.nm.outputs.cache-hit != 'true'
         run: npm ci --no-audit --no-fund
 
       - name: Setup check (no downloads)
         run: node tools/setup.mjs --check --no-local
 
       - name: Unit & integration tests
-        run: node --test
+        run: node --test --test-shard=${{ matrix.shard }}/4
 
       - name: Server smoke test (boot, /healthz, index.html, doctor)
         shell: bash
@@ -81,7 +93,16 @@ jobs:
           node-version: 22
           cache: npm
 
+      - id: nm
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            public/vendor
+          key: nm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json', 'tools/vendor.mjs') }}
+
       - name: Install (npm ci → postinstall copies public/vendor)
+        if: steps.nm.outputs.cache-hit != 'true'
         run: npm ci --no-audit --no-fund
 
       - name: Lint (warnings allowed)

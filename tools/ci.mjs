@@ -41,6 +41,7 @@ export const SMOKE_PATHS = ['/healthz', '/', '/vendor/pixi.min.js'];
 export const SKIPPED_CI_STEPS = [
   { uses: 'actions/checkout', why: 'GitHub runner: the checkout is this folder' },
   { uses: 'actions/setup-node', why: 'GitHub runner: the Node.js of this machine is used' },
+  { uses: 'actions/cache', why: 'GitHub runner: node_modules cache; locally your own node_modules is used' },
   { name: 'Install (npm ci → postinstall copies public/vendor)', why: 'run `npm ci` yourself; it is not a check' },
 ];
 
