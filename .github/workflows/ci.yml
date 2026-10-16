@@ -1,8 +1,15 @@
 name: CI
 
+# Actions usage (GitHub pauses busy forks): a push to a branch runs the light matrix (Linux, Node 22, 4 shards = 5 jobs);
+# tags, pull requests and manual runs run the full one (Linux + Windows × Node 22 + 24 × 4 shards = 17 jobs).
+# Docs-only pushes run nothing.
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
+    paths-ignore: ['**/*.md', 'docs/**', '.github/ISSUE_TEMPLATE/**', 'LICENSE', 'NOTICE*']
   pull_request:
+    paths-ignore: ['**/*.md', 'docs/**', '.github/ISSUE_TEMPLATE/**']
   workflow_dispatch:
 
 concurrency:
@@ -20,9 +27,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: ${{ fromJSON(github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
         # 22 and 24 = the maintained LTS lines (24 is what `winget install OpenJS.NodeJS.LTS` installs today)
-        node: [22, 24]
+        node: ${{ fromJSON(github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') && '[22]' || '[22, 24]') }}
         # node --test --test-shard splits the test files 4 ways: ~4 min per job instead of ~15
         shard: [1, 2, 3, 4]
     env:
