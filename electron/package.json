@@ -60,6 +60,16 @@
         "to": "game/server"
       },
       {
+        "from": "../tools",
+        "to": "game/tools",
+        "filter": [
+          "assets/anim-roles.mjs",
+          "assets/atlas.mjs",
+          "assets/skel.mjs",
+          "golden.mjs"
+        ]
+      },
+      {
         "from": "../packs",
         "to": "game/packs"
       },

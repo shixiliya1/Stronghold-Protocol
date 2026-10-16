@@ -32,6 +32,22 @@ const skip = (rel) => /(^|\/)(test|tests|__tests__)\//.test(rel) || /\.(md|d\.ts
 const addTree = (rel) => add(path.join(ROOT, rel), rel);
 for (const rel of ['server', 'shared', 'node_modules/ws']) addTree(rel);
 for (const rel of Object.keys(files)) if (skip(rel)) delete files[rel];
+// files outside those trees the server imports (0.3.0: server/plugins + server/studio import tools/assets/*.mjs,
+// tools/golden.mjs): follow every static and literal dynamic relative import until nothing new is reached
+const IMPORT_RE = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s*)['"](\.{1,2}\/[^'"]+)['"]/gm;
+for (let grew = true; grew;) {
+  grew = false;
+  for (const rel of Object.keys(files)) {
+    if (!/\.(m?js|cjs)$/.test(rel) || rel.startsWith('node_modules/')) continue;
+    const src = Buffer.from(files[rel], 'base64').toString('utf8').replace(/`(?:\\[\s\S]|[^`\\])*`/g, '``');
+    for (const m of src.matchAll(IMPORT_RE)) {
+      const dep = path.posix.normalize(path.posix.join(path.posix.dirname(rel), m[1]));
+      if (files[dep] || dep.startsWith('..') || skip(dep)) continue;
+      const abs = path.join(ROOT, dep);
+      if (fs.existsSync(abs) && fs.statSync(abs).isFile()) { files[dep] = fs.readFileSync(abs).toString('base64'); grew = true; }
+    }
+  }
+}
 files['package.json'] = Buffer.from(JSON.stringify({ name: 'stronghold-server', version: APP_VERSION, type: 'module', private: true })).toString('base64');
 files['tools/server-bin/entry.mjs'] = fs.readFileSync(path.join(HERE, 'entry.mjs')).toString('base64');
 add(path.join(ROOT, 'data'), 'data');

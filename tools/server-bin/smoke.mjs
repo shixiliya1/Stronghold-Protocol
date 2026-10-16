@@ -52,6 +52,14 @@ try {
   ok(chat.name === '晨曦守望', 'chat relayed');
   const stats = await b.waitFor('lobby.stats', () => true, 5000);
   ok(stats.online >= 2 || stats.players >= 2 || JSON.stringify(stats).length > 2, 'lobby stats ' + JSON.stringify(stats).slice(0, 120));
+  // a solo match starts (the simulation, the match host)
+  const { client: c } = await connectAs(url, 'Solo');
+  c.send({ t: 'room.create', mode: 'solo', difficulty: 'FUNNY' });
+  await c.waitFor('room.state', (m) => !!m.code, 3000);
+  c.send({ t: 'room.start' });
+  const pub = await c.waitFor('m.public', () => true, 20000);
+  ok(pub.phase === 'INFO_CHECK', 'solo match started ' + pub.modeId);
+  await c.close();
   await a.close(); await b.close();
 } finally {
   child.kill('SIGINT');
