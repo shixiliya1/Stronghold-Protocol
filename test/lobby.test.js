@@ -19,7 +19,7 @@ import { sanitizeName, TokenBucket, SessionRegistry, clientAddress, normalizeIp,
 import { StubMatch as Match } from '../server/match/StubMatch.js';
 import { Match as RealMatch } from '../server/match/Match.js';
 import { TestClient } from './helpers/wsClient.js';
-import { ERR, MAX_SEATS, MAX_SPECTATORS, PHASE, EMOTES } from '../shared/constants.js';
+import { ERR, MAX_SEATS, MAX_SPECTATORS, PHASE, EMOTES, PROTOCOL_VERSION } from '../shared/constants.js';
 
 const CODE_RE = new RegExp(`^[${CODE_ALPHABET}]{4}$`);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -1188,8 +1188,8 @@ describe('websocket lobby', () => {
       const a = await pool.player('Twin');
       const before = srv.registry.size;
       const b = await pool.connect();
-      b.send({ t: 'hello', name: 'Twin', token: a.token, version: 1 });
-      for (let k = 0; k < 5; k++) a.send({ t: 'hello', name: 'Ghost', version: 1 });
+      b.send({ t: 'hello', name: 'Twin', token: a.token, version: PROTOCOL_VERSION });
+      for (let k = 0; k < 5; k++) a.send({ t: 'hello', name: 'Ghost', version: PROTOCOL_VERSION });
       a.send({ t: 'room.create', mode: 'coop', difficulty: 'NORMAL' });
       const info = await a.closed;
       assert.equal(info.code, 4001);
