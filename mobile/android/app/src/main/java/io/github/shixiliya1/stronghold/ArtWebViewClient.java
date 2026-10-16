@@ -46,7 +46,7 @@ public class ArtWebViewClient extends BridgeWebViewClient {
                 File over = CasStore.fileFor(ctx, path); // a server's mod overlay (CasStore)
                 if (over != null) { WebResourceResponse r = fileResponse(over, path); if (r != null) return r; }
             }
-            if (path.startsWith("/assets/") || path.equals("/data/local-assets.json")) {
+            if (path.startsWith("/assets/") || path.equals("/data/local-assets.json") || path.equals("/data/local-fx.json")) {
                 WebResourceResponse r = artFile(path);
                 if (r != null) return r;
             }

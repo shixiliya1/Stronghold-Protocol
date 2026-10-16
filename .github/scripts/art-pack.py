@@ -15,7 +15,7 @@ art-<hash12>, reused by every client release with that art).
 import argparse, hashlib, json, os, struct, sys, zipfile
 
 ART_DIRS = ('public/assets',)
-ART_FILES = ('data/local-assets.json',)
+ART_FILES = ('data/local-assets.json', 'data/local-fx.json')
 PREFIX = 'Stronghold-Protocol-Art-'
 
 
