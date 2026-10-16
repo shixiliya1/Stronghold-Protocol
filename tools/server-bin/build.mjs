@@ -30,7 +30,8 @@ const add = (abs, rel) => {
 };
 const skip = (rel) => /(^|\/)(test|tests|__tests__)\//.test(rel) || /\.(md|d\.ts)$/.test(rel);
 const addTree = (rel) => add(path.join(ROOT, rel), rel);
-for (const rel of ['server', 'shared', 'node_modules/ws']) addTree(rel);
+// ses + acorn (+ @endo/*): the plugin script sandbox (only loaded when SP_PLUGIN_SCRIPTS is on)
+for (const rel of ['server', 'shared', 'node_modules/ws', 'node_modules/ses', 'node_modules/@endo', 'node_modules/acorn']) addTree(rel);
 for (const rel of Object.keys(files)) if (skip(rel)) delete files[rel];
 // files outside those trees the server imports (0.3.0: server/plugins + server/studio import tools/assets/*.mjs,
 // tools/golden.mjs): follow every static and literal dynamic relative import until nothing new is reached

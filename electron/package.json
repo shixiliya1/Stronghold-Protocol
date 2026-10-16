@@ -81,6 +81,27 @@
         ]
       },
       {
+        "from": "../node_modules/ses",
+        "to": "game/node_modules/ses",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../node_modules/@endo",
+        "to": "game/node_modules/@endo",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../node_modules/acorn",
+        "to": "game/node_modules/acorn",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "../LICENSE",
         "to": "LICENSE-Stronghold-Protocol.txt"
       },
