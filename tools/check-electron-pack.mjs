@@ -31,7 +31,8 @@ function visit(file, from) {
   const src = fs.readFileSync(file, 'utf8').replace(/`(?:\\[\s\S]|[^`\\])*`/g, '``').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const inApp = file.startsWith(appDir + path.sep);
   const refs = [];
-  for (const re of patterns) for (const m of src.matchAll(re)) refs.push(m[1]);
+  const lazy = new Set(); // import('pkg') / require('pkg') of a bare package: loaded on demand (e.g. the plugin tools) — a warning only
+  for (const [i, re] of patterns.entries()) for (const m of src.matchAll(re)) { if (m[1].includes('${')) continue; refs.push(m[1]); if (i >= 3) lazy.add(m[1]); }
   for (const m of src.matchAll(joinRe)) {
     const parts = [...m[2].matchAll(/['"]([^'"]+)['"]/g)].map((x) => x[1]);
     const base = m[1] === 'HERE' ? path.dirname(file) : gameDir;
@@ -46,7 +47,9 @@ function visit(file, from) {
       const name = r.replace(/^node:/, '').split('/').slice(0, r.startsWith('@') ? 2 : 1).join('/');
       if (builtins.has(name) || builtins.has(r.replace(/^node:/, ''))) continue;
       const roots = inApp ? [appDir] : [gameDir, path.dirname(gameDir)];
-      if (!roots.some((d) => fs.existsSync(path.join(d, 'node_modules', name)))) missing.push(`${path.relative(path.dirname(appDir), file)}: package ${r}`);
+      if (roots.some((d) => fs.existsSync(path.join(d, 'node_modules', name)))) continue;
+      if (lazy.has(r)) { console.log(`::warning::lazy package not shipped: ${path.relative(path.dirname(appDir), file)}: ${r}`); continue; }
+      missing.push(`${path.relative(path.dirname(appDir), file)}: package ${r}`);
     }
   }
 }
