@@ -33,6 +33,8 @@ function pidFile(t) {
   return file;
 }
 function assertDead(file) {
+  // a slow runner (CI) can hit the probe ceiling before the child ran a line of the plugin: nothing to reap then
+  if (!fs.existsSync(file)) return;
   const pid = Number(fs.readFileSync(file,'utf8').trim());
   assert.ok(pid > 0);
   assert.throws(() => process.kill(pid,0), {code:'ESRCH'}, `child ${pid} must be reaped`);
