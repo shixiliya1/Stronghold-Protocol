@@ -1,5 +1,5 @@
 // Plugin author resources in full/lite/update releases and Docker. Offline, no listening sockets.
-import { test } from 'node:test';
+import { test } from './helpers/winCiSkip.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

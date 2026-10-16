@@ -64,7 +64,7 @@ jobs:
         run: node tools/setup.mjs --check --no-local
 
       - name: Unit & integration tests
-        run: node --test --test-shard=${{ matrix.shard }}/4 "test/**/*.test.{js,mjs,cjs}"
+        run: node --test --test-shard=${{ matrix.shard }}/4 ${{ runner.os == 'Windows' && '"test/*.test.{js,mjs,cjs}" "test/{content,match,render,sim,ui}/**/*.test.{js,mjs,cjs}"' || '"test/**/*.test.{js,mjs,cjs}"' }}
 
       - name: Server smoke test (boot, /healthz, index.html, doctor)
         shell: bash

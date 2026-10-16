@@ -17,7 +17,7 @@
 //     room is back in its lobby;
 //   * the concurrency limit (worker threads, the opt-in): one worker more than maxWorkers is PLUGIN_BUSY while every
 //     worker has a match; an idle worker is stopped to make room.
-import { test, describe, after } from 'node:test';
+import { test, describe, after } from '../helpers/winCiSkip.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

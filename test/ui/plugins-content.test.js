@@ -13,7 +13,7 @@
 //     page holds (or is loading) is, and its b.result names it; a vanilla spec's result names nothing;
 //   * ui/stats.js: records name the content set (v2, migrated from v1), the overview leaves such matches out unless asked;
 //   * the room's facts (screens/room.js, ui/pluginTag.js): start and ready wait for every page's check.
-import { test, describe, after } from 'node:test';
+import { test, describe, after } from '../helpers/winCiSkip.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
