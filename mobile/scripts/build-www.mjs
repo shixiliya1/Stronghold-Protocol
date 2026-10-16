@@ -39,7 +39,12 @@ async function copyDir(src, dst, filter = () => true, skipDir = () => false) {
 
 await fsp.rm(OUT, { recursive: true, force: true });
 const ART_DIR = `${path.sep}public${path.sep}assets${path.sep}`;
-await copyDir(path.join(ROOT, 'public'), OUT, (f) => !f.includes(`${path.sep}dev${path.sep}`) && !(ART_PACK && f.includes(ART_DIR)), (d) => !!ART_PACK && d === path.join(ROOT, 'public', 'assets'));
+// GitHub Pages caps a site at 1 GB: since 0.3.0 the art carries en / kr / jp / cn voice packs (~340 MB). The Pages
+// build leaves out the English and Korean voices (missing lines fall back to Chinese, CHANGELOG 0.3.0); the desktop /
+// Android art pack keeps them all.
+const PAGES_SKIP = target === 'pages' ? ['en', 'kr'].map((l) => path.join(ROOT, 'public', 'assets', 'audio', 'voice', l)) : [];
+await copyDir(path.join(ROOT, 'public'), OUT, (f) => !f.includes(`${path.sep}dev${path.sep}`) && !(ART_PACK && f.includes(ART_DIR)),
+  (d) => (!!ART_PACK && d === path.join(ROOT, 'public', 'assets')) || PAGES_SKIP.includes(d));
 await copyDir(path.join(ROOT, 'data'), path.join(OUT, 'data'), (f) => !(ART_PACK && path.basename(f) === 'local-assets.json'));
 await copyDir(path.join(ROOT, 'shared'), path.join(OUT, 'shared'));
 await copyDir(path.join(ROOT, 'server', 'sim'), path.join(OUT, 'sim'), (f) => f.endsWith('.js') && path.basename(f).toLowerCase() !== 'nodedata.js');
