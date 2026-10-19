@@ -262,7 +262,8 @@ jobs:
 
   publish:
     needs: [build, smoke]
-    if: inputs.publish != false
+    # a tag push / workflow_call has no publish input (null, and null == false in expressions): only an explicit false skips
+    if: toJSON(inputs.publish) != 'false'
     runs-on: ubuntu-latest
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
