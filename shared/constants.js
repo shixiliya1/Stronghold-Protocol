@@ -4,7 +4,9 @@ import { N_ } from './i18n.js';
 
 // 2 (fork, 0.3.0): plugins / content sets (room.setPlugins, room.contentReady, welcome.content) and new rules — a 0.2.x
 // client against a 0.3.x server would run a different simulation, so the chooser / resource manifest tell it to update.
-export const PROTOCOL_VERSION = 2;
+// 3 (fork, 0.3.1): simulation changes (spawns, deploy, kits) — the desktop / Android clients simulate battles with their
+// bundled copy, so a 0.3.0 client and a 0.3.1 server must not play together.
+export const PROTOCOL_VERSION = 3;
 /** Release version shown to players (title screen, server banner, /healthz). Kept equal to package.json "version"
  * (test/version.test.js); PROTOCOL_VERSION above is the separate wire-format number. */
 export const APP_VERSION = '0.3.1';

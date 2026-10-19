@@ -98,6 +98,8 @@ jobs:
       - name: Art pack (published once per art hash as release art-<hash12>; the APK downloads it on first start)
         env:
           GH_TOKEN: ${{ github.token }}
+          # the Windows client release owns the upload; this waits for it (publishes itself only if it never appears)
+          ART_OWNER: '0'
         run: .github/scripts/publish-art.sh "$RUNNER_TEMP/art"
 
       - name: Web client → Capacitor project
