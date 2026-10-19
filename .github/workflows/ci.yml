@@ -32,7 +32,7 @@ jobs:
         os: ${{ fromJSON(github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
         # 22 and 24 = the maintained LTS lines (24 is what `winget install OpenJS.NodeJS.LTS` installs today)
         node: ${{ fromJSON(github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') && '[22]' || '[22, 24]') }}
-        # node --test --test-shard splits the test files 4 ways: ~4 min per job instead of ~15
+        # node --test --test-shard splits the test files 4 ways (the flag must come before the globs: after them node ignores it): ~4 min per job instead of ~15
         shard: [1, 2, 3, 4]
     env:
       # Browser/E2E suites gate themselves on these (and on a local Chrome + downloaded game assets, which CI never
@@ -68,7 +68,7 @@ jobs:
       # package.json "test": node --test over the test files. A bare `node --test` would also run every helper and
       # fixture under test/ (Node's default patterns take any .js there for a test file).
       - name: Unit & integration tests
-        run: npm run test -- --test-shard=${{ matrix.shard }}/4
+        run: node --test --test-shard=${{ matrix.shard }}/4 "test/**/*.test.js" "test/e2e/coop.e2e.mjs" "plugins/_template/**/*.test.js"
 
       - name: Server smoke test (boot, /healthz, index.html, doctor)
         shell: bash

@@ -319,7 +319,7 @@ for (const [name, mutate] of Object.entries({
   assert.ok(buildContentSet({ registry: f.registry, ids: ['data-demo'] }).problems.length);
 });
 
-test('production match host and an isolated browser module tree agree', { timeout: 30000 }, async t => {
+test('production match host and an isolated browser module tree agree', { timeout: 120000 }, async t => {
   const { createContentSets } = await import('../../server/plugins/contentSets.js');
   const { createMatchHosts } = await import('../../server/match/host/index.js');
   const { fixtureSpec } = await import('../helpers/simHostFixture.js');

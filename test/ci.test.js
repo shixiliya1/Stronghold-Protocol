@@ -51,8 +51,10 @@ test('the commands match ci.yml: the run lines, the npm scripts ci.yml calls, th
   for (const l of STEPS) {
     const r = run(l.ci.job, l.ci.name);
     if (l.npm) {
-      // ci.yml splits the test files over the shard matrix (npm run test -- --test-shard=i/4); tools/ci.mjs runs them all
-      assert.equal(l.id === 'test' ? r.replace(' -- --test-shard=${{ matrix.shard }}/4', '') : r, `npm run ${l.npm}`, l.id);
+      // ci.yml splits the test files over the shard matrix (package.json's test command with --test-shard=i/4 before the
+      // globs — node ignores it after them); tools/ci.mjs runs them all
+      if (l.id === 'test') assert.equal(r.replace('--test-shard=${{ matrix.shard }}/4 ', ''), pkg.scripts[l.npm], l.id);
+      else assert.equal(r, `npm run ${l.npm}`, l.id);
       assert.equal(pkg.scripts[l.npm], l.describe, `package.json script ${l.npm} is what ${l.id} runs`);
     } else if (l.id !== 'smoke') assert.equal(r, l.describe, l.id);
   }
