@@ -13,7 +13,7 @@
 //     page holds (or is loading) is, and its b.result names it; a vanilla spec's result names nothing;
 //   * ui/stats.js: records name the content set (v2, migrated from v1), the overview leaves such matches out unless asked;
 //   * the room's facts (screens/room.js, ui/pluginTag.js): start and ready wait for every page's check.
-import { test, describe, after } from '../helpers/winCiSkip.js';
+import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -373,7 +373,10 @@ describe('the runner\'s cs check (public/js/battle/runner.js)', () => {
     const s = realStart();
     s.spec.cs = 'cd'.repeat(32);
     const state = { held: null, loading: 'cd'.repeat(32) };
-    const r = rig({ state, contentFor: async (cs) => { await tick(); state.held = { cs, data: DATA }; state.loading = null; return state.held; } });
+    // the set arrives after one turn of the event loop the rig's run() flushes (setImmediate): a setTimeout(0) could
+    // still be pending when the 50 flushes finish on a fast runner (Node 24.21 on CI took 3.8 ms), and the battle then
+    // never became the authority before the clock ran out
+    const r = rig({ state, contentFor: async (cs) => { await new Promise((ok) => setImmediate(ok)); state.held = { cs, data: DATA }; state.loading = null; return state.held; } });
     r.net.emit('b.start', s);
     await r.run(60_000);
     const e = r.runner._entries.get(s.battleId);
